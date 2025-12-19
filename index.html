@@ -76,6 +76,20 @@
             console.warn("Firebase configuration error:", e);
         }
 
+        // --- HELPER: NOTIFICATIONS ---
+        const requestNotificationPermission = () => {
+            if (!("Notification" in window)) return;
+            if (Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+        };
+
+        const sendNotification = (title, body) => {
+            if (Notification.permission === "granted") {
+                new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' });
+            }
+        };
+
         // --- COMPONENTS ---
 
         const ConfigErrorScreen = () => (
@@ -113,6 +127,9 @@
                     const normalizedEmail = email.toLowerCase().trim();
                     const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
                     const user = userCredential.user;
+
+                    // Request notifications on login
+                    requestNotificationPermission();
 
                     if (normalizedEmail === MASTER_ADMIN_EMAIL) {
                         const adminProfile = {
@@ -153,7 +170,7 @@
             };
 
             return (
-                <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 overflow-y-auto">
+                <div className="min-h-[100vh] bg-slate-900 flex flex-col items-center justify-center p-4 overflow-y-auto">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in flex-shrink-0">
                         <div className="bg-blue-900 p-8 text-center relative">
                              <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg">
@@ -182,6 +199,104 @@
         };
 
         // --- MODULES ---
+
+        const ProgressModule = ({ user, tasks, attendanceLogs, reports }) => {
+            const myTasks = tasks.filter(t => t.assignee === user.name);
+            const completed = myTasks.filter(t => t.status === 'done').length;
+            const total = myTasks.length;
+            const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+            const presentDays = attendanceLogs.filter(l => l.userId === user.uid && l.type === 'IN').length;
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-bold text-slate-800">My Progress Report</h2></header>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Task Efficiency</h3>
+                            <div className="flex items-end gap-2 mb-2">
+                                <span className="text-4xl font-bold text-blue-600">{progress}%</span>
+                                <span className="text-sm text-slate-400 mb-1">Completion</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2">
+                                <div className="bg-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${progress}%`}}></div>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">{completed} / {total} Tasks Completed</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Attendance Streak</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-green-100 text-green-600 rounded-lg"><Lucide.CalendarCheck size={24} /></div>
+                                <div><span className="text-2xl font-bold text-slate-800">{presentDays}</span><p className="text-xs text-slate-500">Days Present</p></div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Reports Submitted</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><Lucide.FileText size={24} /></div>
+                                <div><span className="text-2xl font-bold text-slate-800">{reports.filter(r => r.userId === user.uid).length}</span><p className="text-xs text-slate-500">EODs Filed</p></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                        <div className="p-4 border-b border-slate-100 font-bold text-slate-700">Recent Tasks</div>
+                        <div className="p-4 space-y-3">
+                            {myTasks.slice(0, 5).map(task => (
+                                <div key={task.id} className="flex justify-between items-center border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                                    <div><p className="text-sm font-medium text-slate-800">{task.title}</p><p className="text-xs text-slate-500">{new Date(task.createdAt?.toDate()).toLocaleDateString()}</p></div>
+                                    <span className={`text-xs px-2 py-1 rounded ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{task.status}</span>
+                                </div>
+                            ))}
+                            {myTasks.length === 0 && <p className="text-sm text-slate-400">No recent tasks found.</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const IdeaHubModule = ({ user, ideas, onSubmitIdea }) => {
+            const [title, setTitle] = useState('');
+            const [desc, setDesc] = useState('');
+            const [category, setCategory] = useState('Process Improvement');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!title || !desc) return;
+                onSubmitIdea({ title, description: desc, category, userId: user.uid, userName: user.name, votes: 0, timestamp: serverTimestamp() });
+                setTitle(''); setDesc('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-bold text-slate-800">Idea Hub</h2>
+                        <p className="text-slate-500">Work Process Idea Center</p>
+                    </header>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Lucide.Lightbulb size={18} className="text-yellow-500"/> Submit Idea</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <input type="text" className="w-full border p-2 rounded text-base" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                <select className="w-full border p-2 rounded text-base bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                    <option>Process Improvement</option><option>Cost Saving</option><option>Culture</option><option>Safety</option>
+                                </select>
+                                <textarea className="w-full border p-2 rounded text-base h-32 resize-none" placeholder="Description..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-blue-900 text-white py-2 rounded font-medium">Submit</button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 space-y-4">
+                            {ideas.map(idea => (
+                                <div key={idea.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                                    <div className="flex justify-between items-start mb-2"><span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-bold">{idea.category}</span><span className="text-xs text-slate-400">{idea.userName}</span></div>
+                                    <h4 className="font-bold text-slate-800 text-lg mb-1">{idea.title}</h4>
+                                    <p className="text-slate-600 text-sm">{idea.description}</p>
+                                </div>
+                            ))}
+                            {ideas.length === 0 && <div className="text-center py-10 text-slate-400">No ideas yet. Share yours!</div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
 
         const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
             const [newName, setNewName] = useState('');
@@ -433,6 +548,8 @@
 
         const ChatModule = ({ user, messages, onSendMessage }) => {
             const [text, setText] = useState('');
+            const [isUploading, setIsUploading] = useState(false);
+            const fileInputRef = useRef(null);
             const bottomRef = useRef(null);
             
             useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -440,8 +557,42 @@
             const handleSend = (e) => {
                 e.preventDefault();
                 if(!text.trim()) return;
-                onSendMessage({ text, userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
+                onSendMessage({ text, type: 'text', userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
                 setText('');
+            };
+
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                if (file.type !== 'application/pdf') {
+                    alert('Only PDF files are allowed.');
+                    return;
+                }
+                
+                if (file.size > 500 * 1024) { // 500KB Limit for Firestore
+                    alert('File too large! Please upload PDFs smaller than 500KB.');
+                    return;
+                }
+
+                setIsUploading(true);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64String = reader.result;
+                    onSendMessage({ 
+                        text: 'Shared a PDF file', 
+                        type: 'pdf',
+                        fileName: file.name,
+                        fileData: base64String,
+                        userId: user.uid, 
+                        userName: user.name, 
+                        userPhoto: user.photoURL || '', 
+                        timestamp: serverTimestamp() 
+                    });
+                    setIsUploading(false);
+                    e.target.value = null; // Reset input
+                };
+                reader.readAsDataURL(file);
             };
 
             return (
@@ -455,15 +606,30 @@
                                 <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden">
                                      {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">{m.userName.charAt(0)}</div>}
                                 </div>
-                                <div className={`max-w-[70%] p-3 rounded-lg text-sm ${m.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
+                                <div className={`max-w-[75%] p-3 rounded-lg text-sm ${m.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
                                     <p className="font-bold text-xs opacity-70 mb-1">{m.userName}</p>
-                                    <p>{m.text}</p>
+                                    
+                                    {m.type === 'pdf' ? (
+                                        <div className="flex items-center gap-2 bg-black/10 p-2 rounded">
+                                            <Lucide.FileText size={24} className="flex-shrink-0" />
+                                            <div className="overflow-hidden">
+                                                <p className="truncate font-medium">{m.fileName}</p>
+                                                <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-bold mt-1 inline-block">Download PDF</a>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p>{m.text}</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
                         <div ref={bottomRef} />
                     </div>
-                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-slate-200 bg-white flex gap-2">
+                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-slate-200 bg-white flex gap-2 items-center">
+                        <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                        <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-blue-600 p-2 rounded-full transition-colors" disabled={isUploading}>
+                            {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
+                        </button>
                         <input type="text" className="flex-1 border border-slate-300 rounded-full px-4 py-2 text-base md:text-sm focus:outline-none focus:border-blue-500" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
                         <button className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 flex-shrink-0"><Lucide.Send size={18}/></button>
                     </form>
@@ -487,10 +653,26 @@
             const [reports, setReports] = useState([]);
             const [allUsers, setAllUsers] = useState([]);
             const [messages, setMessages] = useState([]);
+            const [ideas, setIdeas] = useState([]);
 
+            // Persistent Login Logic
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, async (u) => {
-                    if (u) { setUser(u); } else { setUser(null); setProfile(null); }
+                    if (u) { 
+                        setUser(u);
+                        try {
+                            const q = query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), where("uid", "==", u.uid));
+                            const snapshot = await getDocs(q);
+                            if (!snapshot.empty) {
+                                setProfile({ ...snapshot.docs[0].data(), docId: snapshot.docs[0].id });
+                            }
+                        } catch (e) {
+                            console.error("Profile fetch error", e);
+                        }
+                    } else { 
+                        setUser(null); 
+                        setProfile(null); 
+                    }
                     setLoading(false);
                 });
                 return () => unsubscribe();
@@ -502,12 +684,28 @@
                 const unsub2 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), s => setTasks(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub3 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), s => setLeaves(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub4 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), orderBy('timestamp', 'desc')), s => setReports(s.docs.map(d => ({id: d.id, ...d.data()}))));
-                const unsub5 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), orderBy('timestamp', 'asc')), s => setMessages(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub5 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), orderBy('timestamp', 'asc')), s => {
+                    const newMessages = s.docs.map(d => ({id: d.id, ...d.data()}));
+                    setMessages(newMessages);
+                    if (!s.empty) {
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        const now = new Date();
+                        const msgTime = lastMsg.timestamp?.toDate ? lastMsg.timestamp.toDate() : new Date();
+                        if (lastMsg.userId !== user.uid && (now - msgTime) < 10000 && s.docChanges().some(c => c.type === 'added' && c.doc.id === lastMsg.id)) {
+                            sendNotification(`New Message from ${lastMsg.userName}`, lastMsg.type === 'pdf' ? 'Shared a PDF File' : lastMsg.text);
+                        }
+                    }
+                });
+                const unsub7 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), orderBy('timestamp', 'desc')), s => setIdeas(s.docs.map(d => ({id: d.id, ...d.data()}))));
+
                 let unsub6 = () => {};
                 if (profile.role === 'Admin') {
                     unsub6 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), s => setAllUsers(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                } else {
+                    setAllUsers([]); // Ensure non-admins have empty list
                 }
-                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+                
+                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
             }, [user, profile]);
 
             const handleLogout = async () => { await signOut(auth); setProfile(null); };
@@ -536,11 +734,13 @@
                         </div>
                         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
                             <NavItem id="dashboard" icon={Lucide.LayoutDashboard} label="Dashboard" />
+                            <NavItem id="progress" icon={Lucide.BarChart2} label="My Progress" />
                             <NavItem id="attendance" icon={Lucide.Clock} label="Attendance" />
                             <NavItem id="tasks" icon={Lucide.CheckSquare} label="Task Board" />
                             <NavItem id="eod" icon={Lucide.FileText} label="Daily Reports" />
                             <NavItem id="leaves" icon={Lucide.CalendarDays} label="Leaves" />
                             <NavItem id="chat" icon={Lucide.MessageSquare} label="Group Chat" />
+                            <NavItem id="ideas" icon={Lucide.Lightbulb} label="Idea Hub" />
                             {profile.role === 'Admin' && <NavItem id="users" icon={Lucide.Users} label="User Management" />}
                         </nav>
                         <div className="p-4 border-t border-blue-900"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-red-600 transition-colors py-2 rounded-lg text-sm"><Lucide.LogOut size={16} /> Sign Out</button></div>
@@ -568,6 +768,8 @@
                                 {activeTab === 'leaves' && <AvailabilityModule user={{...profile, uid: user.uid}} leaves={leaves} onAddLeave={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), data)} />}
                                 {activeTab === 'eod' && <EODModule user={{...profile, uid: user.uid}} reports={reports} onSubmitReport={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), data)} />}
                                 {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} messages={messages} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
+                                {activeTab === 'progress' && <ProgressModule user={{...profile, uid: user.uid}} tasks={tasks} attendanceLogs={attendanceLogs} reports={reports} />}
+                                {activeTab === 'ideas' && <IdeaHubModule user={{...profile, uid: user.uid}} ideas={ideas} onSubmitIdea={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), data)} />}
                             </div>
                         </div>
                     </main>
