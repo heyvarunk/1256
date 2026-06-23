@@ -3,19 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Varun Dynamics ERP (Local)</title>
+    <title>Varun Dynamics ERP (Enterprise)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Babel for JSX compilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- jsPDF for Payslip Generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
-    <!-- Import Map for Babel JSX runtime -->
+    <!-- Import Map to fix react/jsx-runtime error in ES Modules -->
     <script type="importmap">
         {
             "imports": {
@@ -23,40 +19,69 @@
             }
         }
     </script>
+    
+    <!-- jsPDF for Payslip Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        /* Essential for Mobile Full Height */
+        /* Essential for Mobile Full Height & Microsoft Fluent UI Typography */
+        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
+        
         html, body, #root {
             height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden; 
-            font-family: 'Inter', sans-serif;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background-color: #faf9f8;
         }
         
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #f8fafc; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        /* Microsoft Style Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #faf9f8; }
+        ::-webkit-scrollbar-thumb { background: #c8c6c4; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a19f9d; }
+        
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Custom range slider for OKRs */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px; width: 16px;
+            border-radius: 50%;
+            background: #0078d4;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer;
+            background: #edebe9;
+            border-radius: 2px;
         }
         
         body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans selection:bg-blue-200">
+<body class="bg-[#faf9f8] text-[#323130] font-sans selection:bg-[#c7e0f4]">
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
-        import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import * as Lucide from 'https://esm.sh/lucide-react@0.263.1';
         
-        // Firebase Imports
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, setDoc, updateDoc, deleteDoc, doc, query, onSnapshot, serverTimestamp, orderBy, where, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js';
@@ -77,9 +102,9 @@
 
         const APP_ID = 'varun-dynamics-local';
         const MASTER_ADMIN_EMAIL = 'info@varundynamics.in';
+        const CRM_EMAIL = 'crm@varundynamics.in';
         const LOGO_URL = "https://raw.githubusercontent.com/heyvarunk/124/main/Copilot_20250716_231520.png";
 
-        // --- APP INITIALIZATION ---
         let app, auth, db, isConfigured = false;
         
         try {
@@ -91,7 +116,6 @@
             console.warn("Firebase configuration error:", e);
         }
 
-        // --- HELPER: NOTIFICATIONS ---
         const requestNotificationPermission = () => {
             if (!("Notification" in window)) return;
             if (Notification.permission !== "granted") {
@@ -105,25 +129,23 @@
             }
         };
 
-        // --- COMPONENTS ---
-
         const ConfigErrorScreen = () => (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full text-center space-y-4">
-                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full mx-auto flex items-center justify-center">
+            <div className="min-h-screen bg-[#f3f2f1] flex items-center justify-center p-4">
+                <div className="bg-white rounded-md shadow-lg border border-[#edebe9] p-8 max-w-lg w-full text-center space-y-4">
+                    <div className="w-16 h-16 bg-[#fde7e9] text-[#a4262c] rounded-full mx-auto flex items-center justify-center">
                         <Lucide.AlertTriangle size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-800">Connection Error</h2>
-                    <p className="text-slate-600">Could not connect to Firebase.</p>
-                    <button onClick={() => window.location.reload()} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Retry</button>
+                    <h2 className="text-2xl font-semibold text-[#323130]">Connection Error</h2>
+                    <p className="text-[#605e5c]">Could not connect to Firebase.</p>
+                    <button onClick={() => window.location.reload()} className="w-full bg-[#0078d4] text-white py-2 rounded hover:bg-[#106ebe]">Retry</button>
                 </div>
             </div>
         );
 
         const LoadingScreen = () => (
-            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <h2 className="text-xl font-bold text-white">Loading System...</h2>
+            <div className="min-h-screen bg-[#f3f2f1] flex flex-col items-center justify-center p-4">
+                <div className="w-16 h-16 border-4 border-[#0078d4] border-t-transparent rounded-full animate-spin mb-4"></div>
+                <h2 className="text-xl font-semibold text-[#323130]">Loading System...</h2>
             </div>
         );
 
@@ -184,28 +206,28 @@
             };
 
             return (
-                <div className="min-h-[100vh] bg-slate-900 flex flex-col items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in flex-shrink-0">
-                        <div className="bg-gradient-to-br from-blue-900 to-slate-900 p-8 text-center relative">
-                             <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg border border-white/10 p-2 overflow-hidden">
+                <div className="min-h-[100vh] bg-[#f3f2f1] flex flex-col items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white rounded shadow-lg border border-[#edebe9] w-full max-w-md overflow-hidden animate-fade-in flex-shrink-0">
+                        <div className="bg-[#f3f2f1] border-b border-[#edebe9] p-8 text-center relative">
+                             <div className="w-16 h-16 bg-white rounded shadow-sm mx-auto flex items-center justify-center mb-4 border border-[#edebe9] p-2 overflow-hidden">
                                 <img src={LOGO_URL} alt="Varun Dynamics Logo" className="w-full h-full object-contain" />
                             </div>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Varun Dynamics</h1>
-                            <p className="text-blue-200 text-sm mt-1 font-medium">Enterprise Resource Portal</p>
+                            <h1 className="text-2xl font-semibold text-[#323130] tracking-tight">Varun Dynamics</h1>
+                            <p className="text-[#0078d4] text-sm mt-1 font-medium">Enterprise Resource Portal</p>
                         </div>
                         <form onSubmit={handleLogin} className="p-8 space-y-6">
-                            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm flex items-center gap-2 border border-red-100"><Lucide.AlertCircle size={16}/> {error}</div>}
+                            {error && <div className="bg-[#fde7e9] text-[#a4262c] p-3 rounded text-sm flex items-center gap-2 border border-[#fde7e9]"><Lucide.AlertCircle size={16}/> {error}</div>}
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Access ID</label>
-                                    <input type="email" required className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base transition-all" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
+                                    <label className="block text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-1.5">Email Access ID</label>
+                                    <input type="email" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Secure Password</label>
-                                    <input type="password" required className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base transition-all" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                    <label className="block text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-1.5">Secure Password</label>
+                                    <input type="password" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
                                 </div>
                             </div>
-                            <button type="submit" disabled={loading} className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-base shadow-lg shadow-blue-900/20 active:scale-[0.98]">
+                            <button type="submit" disabled={loading} className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white font-semibold py-3 rounded transition-all flex items-center justify-center gap-2 text-base shadow-sm active:scale-[0.98]">
                                 {loading ? 'Authenticating...' : 'Sign In Securely'} <Lucide.ArrowRight size={18} />
                             </button>
                         </form>
@@ -214,61 +236,79 @@
             );
         };
 
-        // --- DYNAMIC MODULES ---
-
         const Dashboard = ({ user, attendanceLogs, tasks, leaves, reports, announcements, setActiveTab, onMarkAttendance }) => {
             const time = new Date().getHours();
             const greeting = time < 12 ? 'Good Morning' : time < 18 ? 'Good Afternoon' : 'Good Evening';
-            const todayLog = attendanceLogs.find(l => l.userId === user.uid && new Date(l.timestamp?.toDate()).toDateString() === new Date().toDateString());
+            
+            const todaysLogs = attendanceLogs.filter(l => l.userId === user.uid && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toDateString() === new Date().toDateString())
+                .sort((a, b) => (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()) - (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()));
+            const isClockedIn = todaysLogs.length > 0 && todaysLogs[0].type === 'IN';
             
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <div className="relative overflow-hidden bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-3xl p-8 text-white shadow-xl">
+                    <div className="relative overflow-hidden bg-white border border-[#edebe9] border-t-4 border-t-[#0078d4] rounded shadow-sm p-8 text-[#323130]">
                         <div className="relative z-10">
-                            <p className="text-blue-200 font-medium mb-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            <h2 className="text-3xl md:text-4xl font-bold mb-2">{greeting}, {user.name.split(' ')[0]}</h2>
-                            <p className="opacity-90 max-w-lg">You have {tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} pending tasks today.</p>
+                            <p className="text-[#605e5c] font-medium mb-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            <h2 className="text-3xl md:text-4xl font-semibold mb-2">{greeting}, {user.name.split(' ')[0]}</h2>
+                            <p className="opacity-90 max-w-lg text-[#605e5c]">You have {tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} pending tasks today.</p>
                         </div>
-                        <div className="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 transform origin-bottom-left"></div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
                             <div className="flex justify-between items-start mb-2">
-                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Lucide.Clock size={20} /></div>
-                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${todayLog ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{todayLog ? 'Present' : 'Absent'}</span>
+                                <div className="p-2 bg-[#f3f2f1] text-[#0078d4] rounded"><Lucide.Clock size={20} /></div>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded ${isClockedIn ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#f3f2f1] text-[#605e5c]'}`}>{isClockedIn ? 'Present' : 'Absent'}</span>
                             </div>
-                            <p className="text-slate-500 text-xs font-bold uppercase">Attendance</p>
-                            <p className="text-xl font-bold text-slate-800">{todayLog ? 'Clocked In' : 'Not Marked'}</p>
+                            <p className="text-[#605e5c] text-xs font-semibold uppercase">Attendance</p>
+                            <p className="text-xl font-semibold text-[#323130]">{isClockedIn ? 'Clocked In' : 'Clocked Out'}</p>
                         </div>
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
                             <div className="flex justify-between items-start mb-2">
-                                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Lucide.CheckSquare size={20} /></div>
-                                <span className="text-xs font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700">{tasks.filter(t=>t.status==='done').length} Done</span>
+                                <div className="p-2 bg-[#f3f2f1] text-[#0078d4] rounded"><Lucide.CheckSquare size={20} /></div>
+                                <span className="text-xs font-semibold px-2 py-1 rounded bg-[#eff6fc] text-[#0078d4]">{tasks.filter(t=>t.status==='done').length} Done</span>
                             </div>
-                            <p className="text-slate-500 text-xs font-bold uppercase">My Tasks</p>
-                            <p className="text-xl font-bold text-slate-800">{tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} Pending</p>
+                            <p className="text-[#605e5c] text-xs font-semibold uppercase">My Tasks</p>
+                            <p className="text-xl font-semibold text-[#323130]">{tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} Pending</p>
+                        </div>
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="p-2 bg-[#f3f2f1] text-[#d83b01] rounded"><Lucide.FileText size={20} /></div>
+                            </div>
+                            <p className="text-[#605e5c] text-xs font-semibold uppercase">Daily Reports</p>
+                            <p className="text-xl font-semibold text-[#323130]">{reports.filter(r=>r.userId===user.uid).length} Submitted</p>
+                        </div>
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="p-2 bg-[#f3f2f1] text-[#107c10] rounded"><Lucide.Target size={20} /></div>
+                            </div>
+                            <p className="text-[#605e5c] text-xs font-semibold uppercase">Company Notices</p>
+                            <p className="text-xl font-semibold text-[#323130]">{announcements.length} Active</p>
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-                        <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Quick Actions</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <button onClick={() => onMarkAttendance(todayLog ? 'OUT' : 'IN')} className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all ${todayLog ? 'bg-red-50 border-red-100 text-red-600 hover:bg-red-100' : 'bg-green-50 border-green-100 text-green-600 hover:bg-green-100'}`}>
-                                {todayLog ? <Lucide.LogOut size={24}/> : <Lucide.LogIn size={24}/>}
-                                <span className="text-xs font-bold">{todayLog ? 'Punch Out' : 'Punch In'}</span>
+                    <div className="bg-white rounded shadow-sm border border-[#edebe9] p-5">
+                        <h3 className="font-semibold text-[#323130] mb-4 text-sm uppercase tracking-wider">Quick Actions</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <button onClick={() => onMarkAttendance(isClockedIn ? 'OUT' : 'IN')} className={`p-4 rounded border flex flex-col items-center justify-center gap-2 transition-all ${isClockedIn ? 'bg-white border-[#fde7e9] text-[#a4262c] hover:bg-[#fde7e9]' : 'bg-white border-[#dff6dd] text-[#107c10] hover:bg-[#dff6dd]'}`}>
+                                {isClockedIn ? <Lucide.LogOut size={24}/> : <Lucide.LogIn size={24}/>}
+                                <span className="text-xs font-semibold">{isClockedIn ? 'Punch Out' : 'Punch In'}</span>
                             </button>
-                            <button onClick={()=>setActiveTab('tasks')} className="p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-slate-600 hover:text-blue-600 flex flex-col items-center justify-center gap-2 transition-all">
-                                <Lucide.PlusSquare size={24}/>
-                                <span className="text-xs font-bold">New Task</span>
+                            <button onClick={()=>setActiveTab('tasks')} className="p-4 rounded border border-[#edebe9] hover:border-[#0078d4] hover:bg-[#f3f2f1] text-[#323130] flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.PlusSquare size={24} className="text-[#0078d4]" />
+                                <span className="text-xs font-semibold">New Task</span>
                             </button>
-                            <button onClick={()=>setActiveTab('payroll')} className="p-4 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50 text-slate-600 hover:text-green-600 flex flex-col items-center justify-center gap-2 transition-all">
-                                <Lucide.Wallet size={24}/>
-                                <span className="text-xs font-bold">My Payslip</span>
+                            <button onClick={()=>setActiveTab('expenses')} className="p-4 rounded border border-[#edebe9] hover:border-[#d83b01] hover:bg-[#f3f2f1] text-[#323130] flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.Receipt size={24} className="text-[#d83b01]" />
+                                <span className="text-xs font-semibold">Claim Expense</span>
                             </button>
-                            <button onClick={()=>setActiveTab('helpdesk')} className="p-4 rounded-xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50 text-slate-600 hover:text-purple-600 flex flex-col items-center justify-center gap-2 transition-all">
-                                <Lucide.LifeBuoy size={24}/>
-                                <span className="text-xs font-bold">Support</span>
+                            <button onClick={()=>setActiveTab('payroll')} className="p-4 rounded border border-[#edebe9] hover:border-[#107c10] hover:bg-[#f3f2f1] text-[#323130] flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.Wallet size={24} className="text-[#107c10]" />
+                                <span className="text-xs font-semibold">My Payslip</span>
+                            </button>
+                            <button onClick={()=>setActiveTab('meetings')} className="p-4 rounded border border-[#edebe9] hover:border-[#0078d4] hover:bg-[#f3f2f1] text-[#323130] flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.CalendarClock size={24} className="text-[#0078d4]" />
+                                <span className="text-xs font-semibold">Schedule Meet</span>
                             </button>
                         </div>
                     </div>
@@ -276,8 +316,8 @@
             );
         };
 
-        // --- ADMIN MODULES ---
-
+        // --- CORE MODULES (Restored) ---
+        
         const AdminPayrollManager = ({ users, onUpdateSalary }) => {
             const [selectedUser, setSelectedUser] = useState(null);
             const [salary, setSalary] = useState({ basic: 0, hra: 0, da: 0, special: 0, pf: 0, tax: 0 });
@@ -298,11 +338,11 @@
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">Payroll Management</h2></header>
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Payroll Management</h2></header>
+                    <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
                         <div className="mb-6">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">Select Employee</label>
-                            <select className="w-full border p-2 rounded-lg" onChange={handleUserSelect}>
+                            <label className="block text-sm font-semibold text-[#323130] mb-2">Select Employee</label>
+                            <select className="w-full border border-[#605e5c] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" onChange={handleUserSelect}>
                                 <option value="">-- Choose Employee --</option>
                                 {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
                             </select>
@@ -310,19 +350,19 @@
 
                         {selectedUser && (
                             <div className="space-y-4">
-                                <h3 className="font-bold text-blue-900 border-b pb-2">Earnings Configuration</h3>
+                                <h3 className="font-semibold text-[#0078d4] border-b border-[#edebe9] pb-2">Earnings Configuration</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="text-xs text-slate-500">Basic Pay</label><input type="number" className="w-full border p-2 rounded" value={salary.basic} onChange={e=>setSalary({...salary, basic: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-slate-500">HRA</label><input type="number" className="w-full border p-2 rounded" value={salary.hra} onChange={e=>setSalary({...salary, hra: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-slate-500">DA</label><input type="number" className="w-full border p-2 rounded" value={salary.da} onChange={e=>setSalary({...salary, da: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-slate-500">Special Allow.</label><input type="number" className="w-full border p-2 rounded" value={salary.special} onChange={e=>setSalary({...salary, special: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">Basic Pay</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.basic} onChange={e=>setSalary({...salary, basic: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">HRA</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.hra} onChange={e=>setSalary({...salary, hra: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">DA</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.da} onChange={e=>setSalary({...salary, da: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">Special Allow.</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.special} onChange={e=>setSalary({...salary, special: parseInt(e.target.value)||0})} /></div>
                                 </div>
-                                <h3 className="font-bold text-red-900 border-b pb-2 mt-4">Deductions</h3>
+                                <h3 className="font-semibold text-[#a4262c] border-b border-[#edebe9] pb-2 mt-4">Deductions</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="text-xs text-slate-500">PF</label><input type="number" className="w-full border p-2 rounded" value={salary.pf} onChange={e=>setSalary({...salary, pf: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-slate-500">Tax</label><input type="number" className="w-full border p-2 rounded" value={salary.tax} onChange={e=>setSalary({...salary, tax: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">PF</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.pf} onChange={e=>setSalary({...salary, pf: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-[#605e5c]">Tax</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.tax} onChange={e=>setSalary({...salary, tax: parseInt(e.target.value)||0})} /></div>
                                 </div>
-                                <button onClick={handleSave} className="w-full bg-blue-900 text-white py-3 rounded-lg font-bold mt-4">Save Configuration</button>
+                                <button onClick={handleSave} className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white py-2.5 rounded font-semibold mt-4 shadow-sm">Save Configuration</button>
                             </div>
                         )}
                     </div>
@@ -364,7 +404,7 @@
                     head: [['Earnings Head', 'Amount (INR)']],
                     body: earnings,
                     theme: 'grid',
-                    headStyles: { fillColor: [22, 160, 133] }
+                    headStyles: { fillColor: [0, 120, 212] }
                 });
 
                 doc.autoTable({
@@ -372,7 +412,7 @@
                     head: [['Deductions Head', 'Amount (INR)']],
                     body: deductions,
                     theme: 'grid',
-                    headStyles: { fillColor: [192, 57, 43] }
+                    headStyles: { fillColor: [164, 38, 44] }
                 });
 
                 const net = (salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special) - (salaryConfig.pf + salaryConfig.tax);
@@ -384,10 +424,10 @@
 
             if (!salaryConfig) {
                 return (
-                    <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-slate-200 mt-8">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><Lucide.Ban size={32}/></div>
-                        <h3 className="text-lg font-bold text-slate-700">Payroll Not Configured</h3>
-                        <p className="text-slate-500 mt-2">Your salary details have not been updated by the Administrator yet.</p>
+                    <div className="p-8 text-center bg-white rounded shadow-sm border border-[#edebe9] mt-8">
+                        <div className="w-16 h-16 bg-[#f3f2f1] rounded flex items-center justify-center mx-auto mb-4 text-[#605e5c]"><Lucide.Ban size={32}/></div>
+                        <h3 className="text-lg font-semibold text-[#323130]">Payroll Not Configured</h3>
+                        <p className="text-[#605e5c] mt-2">Your salary details have not been updated by the Administrator yet.</p>
                     </div>
                 );
             }
@@ -398,25 +438,25 @@
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">My Payslip</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">My Payslip</h2></header>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
-                            <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">Total Net Payable</p>
-                            <h3 className="text-4xl font-bold mb-6">₹ {net.toLocaleString()}</h3>
-                            <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
-                                <div><p className="text-slate-400 text-xs">Gross Earnings</p><p className="font-bold text-lg text-green-400">₹ {gross.toLocaleString()}</p></div>
-                                <div><p className="text-slate-400 text-xs">Total Deductions</p><p className="font-bold text-lg text-red-400">₹ {deductions.toLocaleString()}</p></div>
+                        <div className="bg-[#323130] rounded p-6 text-white shadow-sm border border-[#323130]">
+                            <p className="text-[#a19f9d] text-sm font-semibold uppercase tracking-wider mb-1">Total Net Payable</p>
+                            <h3 className="text-4xl font-semibold mb-6">₹ {net.toLocaleString()}</h3>
+                            <div className="grid grid-cols-2 gap-4 border-t border-[#605e5c] pt-4">
+                                <div><p className="text-[#a19f9d] text-xs">Gross Earnings</p><p className="font-semibold text-lg text-[#107c10]">₹ {gross.toLocaleString()}</p></div>
+                                <div><p className="text-[#a19f9d] text-xs">Total Deductions</p><p className="font-semibold text-lg text-[#fde7e9]">₹ {deductions.toLocaleString()}</p></div>
                             </div>
                         </div>
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Breakdown</h3>
+                        <div className="bg-white rounded shadow-sm border border-[#edebe9] p-6">
+                            <h3 className="font-semibold text-[#323130] mb-4 border-b border-[#edebe9] pb-2">Breakdown</h3>
                             <div className="space-y-3 text-sm">
-                                <div className="flex justify-between"><span className="text-slate-500">Basic Pay</span><span className="font-medium">₹ {salaryConfig.basic}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-500">HRA</span><span className="font-medium">₹ {salaryConfig.hra}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-500">Allowances</span><span className="font-medium">₹ {salaryConfig.da + salaryConfig.special}</span></div>
-                                <div className="flex justify-between text-red-600"><span className="text-slate-500">Deductions (PF/Tax)</span><span className="font-medium">- ₹ {deductions}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">Basic Pay</span><span className="font-semibold">₹ {salaryConfig.basic}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">HRA</span><span className="font-semibold">₹ {salaryConfig.hra}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">Allowances</span><span className="font-semibold">₹ {salaryConfig.da + salaryConfig.special}</span></div>
+                                <div className="flex justify-between text-[#a4262c]"><span className="text-[#605e5c]">Deductions (PF/Tax)</span><span className="font-semibold">- ₹ {deductions}</span></div>
                             </div>
-                            <button onClick={downloadPDF} className="w-full mt-6 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                            <button onClick={downloadPDF} className="w-full mt-6 bg-[#0078d4] text-white py-2.5 rounded text-sm font-semibold hover:bg-[#106ebe] transition-colors flex items-center justify-center gap-2 shadow-sm">
                                 <Lucide.Download size={16}/> Download PDF
                             </button>
                         </div>
@@ -430,25 +470,25 @@
             
             // Employee View
             if (user.role !== 'Admin') {
-                const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate()).toLocaleDateString() === today).sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+                const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate ? log.timestamp.toDate() : Date.now()).toLocaleDateString() === today).sort((a, b) => (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()) - (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()));
                 const lastStatus = todaysLogs.length > 0 ? todaysLogs[0].type : 'OUT';
                 return (
                     <div className="space-y-6 animate-fade-in pb-20">
-                        <header><h2 className="text-2xl font-bold text-slate-800">My Attendance</h2></header>
+                        <header><h2 className="text-2xl font-semibold text-[#323130]">My Attendance</h2></header>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
-                                <h3 className="text-lg font-medium text-slate-700">{lastStatus === 'IN' ? 'You are Clocked In' : 'You are Clocked Out'}</h3>
-                                <button onClick={() => onMarkAttendance(lastStatus === 'IN' ? 'OUT' : 'IN')} className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-xl border-8 ${lastStatus === 'IN' ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
-                                    <div className={`p-3 rounded-full ${lastStatus === 'IN' ? 'bg-red-200' : 'bg-green-200'}`}>{lastStatus === 'IN' ? <Lucide.LogOut size={24} /> : <Lucide.LogIn size={24} />}</div>
-                                    <span className="font-bold">{lastStatus === 'IN' ? 'PUNCH OUT' : 'PUNCH IN'}</span>
+                            <div className="md:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] p-6 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
+                                <h3 className="text-lg font-medium text-[#323130]">{lastStatus === 'IN' ? 'You are Clocked In' : 'You are Clocked Out'}</h3>
+                                <button onClick={() => onMarkAttendance(lastStatus === 'IN' ? 'OUT' : 'IN')} className={`w-40 h-40 rounded flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-md border border-[#edebe9] ${lastStatus === 'IN' ? 'bg-[#fde7e9] text-[#a4262c] hover:bg-[#fbd3d6]' : 'bg-[#dff6dd] text-[#107c10] hover:bg-[#c3f1c0]'}`}>
+                                    <div className={`p-3 rounded ${lastStatus === 'IN' ? 'bg-white' : 'bg-white'}`}>{lastStatus === 'IN' ? <Lucide.LogOut size={24} /> : <Lucide.LogIn size={24} />}</div>
+                                    <span className="font-semibold">{lastStatus === 'IN' ? 'PUNCH OUT' : 'PUNCH IN'}</span>
                                 </button>
                             </div>
-                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 h-[300px] overflow-auto">
-                                <h3 className="font-semibold text-slate-700 mb-2">Today's Logs</h3>
+                            <div className="bg-white rounded shadow-sm border border-[#edebe9] p-4 h-[300px] overflow-auto">
+                                <h3 className="font-semibold text-[#323130] mb-2">Today's Logs</h3>
                                 {todaysLogs.map(log => (
-                                    <div key={log.id} className="flex items-center gap-3 p-2 border-b border-slate-50">
-                                        <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                        <div className="text-sm"><span className="font-bold">{log.type === 'IN' ? 'IN' : 'OUT'}</span> <span className="text-slate-400 text-xs">{new Date(log.timestamp?.toDate()).toLocaleTimeString()}</span></div>
+                                    <div key={log.id} className="flex items-center gap-3 p-2 border-b border-[#f3f2f1]">
+                                        <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-[#107c10]' : 'bg-[#a4262c]'}`} />
+                                        <div className="text-sm text-[#323130]"><span className="font-semibold">{log.type === 'IN' ? 'IN' : 'OUT'}</span> <span className="text-[#605e5c] text-xs ml-2">{new Date(log.timestamp?.toDate ? log.timestamp.toDate() : Date.now()).toLocaleTimeString()}</span></div>
                                     </div>
                                 ))}
                             </div>
@@ -460,20 +500,20 @@
             // Admin View
             return (
                 <div className="space-y-6 animate-fade-in pb-20">
-                    <header><h2 className="text-2xl font-bold text-slate-800">Team Attendance</h2></header>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Team Attendance</h2></header>
+                    <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-slate-500 uppercase text-xs"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Status Today</th><th className="px-6 py-3">Last Active</th></tr></thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Status Today</th><th className="px-6 py-3">Last Active</th></tr></thead>
+                            <tbody className="divide-y divide-[#edebe9]">
                                 {allUsers.map(u => {
                                     if(u.id === user.uid) return null; // Skip self in admin view
-                                    const userLogs = attendanceLogs.filter(l => l.userId === u.id && new Date(l.timestamp?.toDate()).toLocaleDateString() === today);
+                                    const userLogs = attendanceLogs.filter(l => l.userId === u.id && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toLocaleDateString() === today);
                                     const isPresent = userLogs.some(l => l.type === 'IN');
                                     return (
-                                        <tr key={u.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 font-medium">{u.name}</td>
-                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${isPresent ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>{isPresent ? 'Present' : 'Absent'}</span></td>
-                                            <td className="px-6 py-4 text-slate-500">{u.lastActive ? new Date(u.lastActive.toDate()).toLocaleTimeString() : 'N/A'}</td>
+                                        <tr key={u.id} className="hover:bg-[#faf9f8]">
+                                            <td className="px-6 py-4 font-semibold text-[#323130]">{u.name}</td>
+                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-semibold ${isPresent ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#fde7e9] text-[#a4262c]'}`}>{isPresent ? 'Present' : 'Absent'}</span></td>
+                                            <td className="px-6 py-4 text-[#605e5c]">{u.lastActive?.toDate ? new Date(u.lastActive.toDate()).toLocaleTimeString() : 'N/A'}</td>
                                         </tr>
                                     );
                                 })}
@@ -501,38 +541,38 @@
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
                     <header>
-                        <h2 className="text-2xl font-bold text-slate-800">Help Desk</h2>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Help Desk</h2>
                     </header>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 className="font-bold text-slate-700 mb-4">Raise New Ticket</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Raise New Ticket</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <select className="w-full border p-2 rounded text-base bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                <select className="w-full border border-[#8a8886] p-2 rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={category} onChange={e=>setCategory(e.target.value)}>
                                     <option>IT Support</option><option>HR Query</option><option>Facility/Maintenance</option><option>Accounts</option>
                                 </select>
-                                <input type="text" className="w-full border p-2 rounded text-base" placeholder="Subject" value={subject} onChange={e=>setSubject(e.target.value)} required />
-                                <textarea className="w-full border p-2 rounded text-base h-32 resize-none" placeholder="Describe the issue..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
-                                <button className="w-full bg-blue-900 text-white py-2 rounded font-medium">Submit Ticket</button>
+                                <input type="text" className="w-full border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" placeholder="Subject" value={subject} onChange={e=>setSubject(e.target.value)} required />
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded text-base h-32 resize-none focus:ring-2 focus:ring-[#0078d4]" placeholder="Describe the issue..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Submit Ticket</button>
                             </form>
                         </div>
                         <div className="lg:col-span-2 space-y-4">
                             {myTickets.map(ticket => (
-                                <div key={ticket.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                                <div key={ticket.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9]">
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{ticket.category}</span>
-                                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${ticket.status==='Open'?'bg-green-100 text-green-700': ticket.status==='Resolved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{ticket.status}</span>
+                                                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#f3f2f1] text-[#605e5c]">{ticket.category}</span>
+                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${ticket.status==='Open'?'bg-[#dff6dd] text-[#107c10]': ticket.status==='Resolved' ? 'bg-[#eff6fc] text-[#0078d4]' : 'bg-[#f3f2f1] text-[#605e5c]'}`}>{ticket.status}</span>
                                             </div>
-                                            <h4 className="font-bold text-slate-800">{ticket.subject}</h4>
-                                            <p className="text-sm text-slate-500 mt-1">{ticket.description}</p>
-                                            {user.role === 'Admin' && <p className="text-xs text-blue-600 mt-1 font-bold">Raised by: {ticket.userName}</p>}
+                                            <h4 className="font-semibold text-[#323130]">{ticket.subject}</h4>
+                                            <p className="text-sm text-[#605e5c] mt-1">{ticket.description}</p>
+                                            {user.role === 'Admin' && <p className="text-xs text-[#0078d4] mt-1 font-semibold">Raised by: {ticket.userName}</p>}
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-xs text-slate-400 mb-2">{new Date(ticket.timestamp?.toDate()).toLocaleDateString()}</p>
+                                            <p className="text-xs text-[#605e5c] mb-2">{new Date(ticket.timestamp?.toDate ? ticket.timestamp.toDate() : Date.now()).toLocaleDateString()}</p>
                                             {user.role === 'Admin' && (
                                                 <select 
-                                                    className="text-xs border p-1 rounded bg-slate-50"
+                                                    className="text-xs border border-[#8a8886] p-1 rounded bg-white text-[#323130]"
                                                     value={ticket.status}
                                                     onChange={(e) => onUpdateStatus(ticket.id, e.target.value)}
                                                 >
@@ -545,7 +585,7 @@
                                     </div>
                                 </div>
                             ))}
-                            {myTickets.length === 0 && <div className="text-center py-10 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">No active tickets.</div>}
+                            {myTickets.length === 0 && <div className="text-center py-10 text-[#605e5c] bg-white rounded border border-dashed border-[#edebe9]">No active tickets.</div>}
                         </div>
                     </div>
                 </div>
@@ -565,35 +605,34 @@
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">Notice Board</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Notice Board</h2></header>
                     {user.role === 'Admin' && (
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
                             <form onSubmit={handlePost} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <input type="text" className="col-span-2 border p-2 rounded" placeholder="Notice Title" value={title} onChange={e=>setTitle(e.target.value)} required />
-                                    <select className="border p-2 rounded" value={type} onChange={e=>setType(e.target.value)}><option>General</option><option>Urgent</option><option>Event</option><option>Holiday</option></select>
+                                    <input type="text" className="col-span-2 border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Notice Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                    <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" value={type} onChange={e=>setType(e.target.value)}><option>General</option><option>Urgent</option><option>Event</option><option>Holiday</option></select>
                                 </div>
-                                <textarea className="w-full border p-2 rounded h-24" placeholder="Content..." value={content} onChange={e=>setContent(e.target.value)} required></textarea>
-                                <button className="bg-blue-900 text-white px-6 py-2 rounded">Post Notice</button>
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded h-24 focus:ring-2 focus:ring-[#0078d4]" placeholder="Content..." value={content} onChange={e=>setContent(e.target.value)} required></textarea>
+                                <button className="bg-[#0078d4] hover:bg-[#106ebe] text-white px-6 py-2 rounded shadow-sm font-semibold">Post Notice</button>
                             </form>
                         </div>
                     )}
                     <div className="space-y-4">
                         {announcements.map(ann => (
-                            <div key={ann.id} className="bg-white p-4 rounded-lg border border-slate-200 flex justify-between items-start">
+                            <div key={ann.id} className="bg-white p-4 rounded border border-[#edebe9] flex justify-between items-start shadow-sm">
                                 <div>
-                                    <h4 className="font-bold">{ann.title} <span className="text-xs bg-slate-100 px-2 rounded ml-2 font-normal">{ann.type}</span></h4>
-                                    <p className="text-sm text-slate-600 mt-1">{ann.content}</p>
+                                    <h4 className="font-semibold text-[#323130]">{ann.title} <span className="text-xs bg-[#f3f2f1] px-2 rounded ml-2 font-normal">{ann.type}</span></h4>
+                                    <p className="text-sm text-[#605e5c] mt-1">{ann.content}</p>
                                 </div>
-                                {user.role === 'Admin' && <button onClick={()=>onDeleteNotice(ann.id)} className="text-red-500 text-xs hover:underline">Delete</button>}
+                                {user.role === 'Admin' && <button onClick={()=>onDeleteNotice(ann.id)} className="text-[#a4262c] text-xs hover:underline font-semibold">Delete</button>}
                             </div>
                         ))}
                     </div>
                 </div>
             );
-        }
+        };
 
-        // --- PREVIOUS MODULES (Standard) ---
         const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
             const [newName, setNewName] = useState('');
             const [newEmail, setNewEmail] = useState('');
@@ -613,34 +652,34 @@
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
                     <header className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                        <h2 className="text-2xl font-bold text-slate-800">User Management</h2>
-                        <button onClick={() => setIsAdding(!isAdding)} className="bg-blue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-800 transition-colors self-start md:self-auto shadow-sm">
+                        <h2 className="text-2xl font-semibold text-[#323130]">User Management</h2>
+                        <button onClick={() => setIsAdding(!isAdding)} className="bg-white border border-[#edebe9] text-[#323130] px-4 py-2 rounded flex items-center gap-2 hover:bg-[#f3f2f1] transition-colors self-start md:self-auto shadow-sm">
                             {isAdding ? <Lucide.X size={18} /> : <Lucide.UserPlus size={18} />} {isAdding ? 'Cancel' : 'Add User'}
                         </button>
                     </header>
                     {isAdding && (
-                        <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-lg animate-fade-in">
+                        <div className="bg-white p-6 rounded border border-[#0078d4] shadow-sm animate-fade-in">
                             <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input type="text" required className="w-full px-3 py-2 border rounded-lg text-base" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full Name" />
-                                <input type="email" required className="w-full px-3 py-2 border rounded-lg text-base" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
-                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newRole} onChange={e => setNewRole(e.target.value)}><option>Employee</option><option>Manager</option><option>Director</option><option>Business Partner</option></select>
-                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newLocation} onChange={e => setNewLocation(e.target.value)}><option>Delhi Unit</option><option>Mumbai HQ</option><option>Bangalore Hub</option><option>Remote</option></select>
-                                <div className="md:col-span-2"><input type="text" className="w-full px-3 py-2 border rounded-lg text-base" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" /></div>
-                                <button className="md:col-span-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-medium mt-2">Confirm Registration</button>
+                                <input type="text" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full Name" />
+                                <input type="email" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newRole} onChange={e => setNewRole(e.target.value)}><option>Employee</option><option>Manager</option><option>Director</option><option>Business Partner</option></select>
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newLocation} onChange={e => setNewLocation(e.target.value)}><option>Delhi Unit</option><option>Mumbai HQ</option><option>Bangalore Hub</option><option>Remote</option></select>
+                                <div className="md:col-span-2"><input type="text" className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" /></div>
+                                <button className="md:col-span-2 w-full bg-[#107c10] hover:bg-[#0b5a0b] text-white py-2 rounded font-semibold mt-2 shadow-sm">Confirm Registration</button>
                             </form>
                         </div>
                     )}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left min-w-[600px]">
-                                <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr></thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs font-semibold"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr></thead>
+                                <tbody className="divide-y divide-[#edebe9]">
                                     {allUsers.map(user => (
-                                        <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">{user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-bold text-slate-500">{user.name.charAt(0)}</span>}</div><span className="font-medium text-slate-900">{user.name}</span></td>
-                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-bold border bg-slate-100 text-slate-600 whitespace-nowrap">{user.role}</span></td>
-                                            <td className="px-6 py-4 text-slate-500">{user.email}</td>
-                                            <td className="px-6 py-4 text-right">{user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-red-500 hover:underline">Remove</button>}</td>
+                                        <tr key={user.id} className="hover:bg-[#faf9f8] transition-colors">
+                                            <td className="px-6 py-4 flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-[#f3f2f1] border border-[#edebe9] flex items-center justify-center overflow-hidden flex-shrink-0">{user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-semibold text-[#605e5c]">{user.name.charAt(0)}</span>}</div><span className="font-semibold text-[#323130]">{user.name}</span></td>
+                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-semibold border border-[#edebe9] bg-[#f3f2f1] text-[#323130] whitespace-nowrap">{user.role}</span></td>
+                                            <td className="px-6 py-4 text-[#605e5c]">{user.email}</td>
+                                            <td className="px-6 py-4 text-right">{user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-[#a4262c] hover:underline font-semibold">Remove</button>}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -655,7 +694,7 @@
             const [newTaskTitle, setNewTaskTitle] = useState('');
             const [newTaskAssignee, setNewTaskAssignee] = useState('');
             const [isAdding, setIsAdding] = useState(false);
-            const columns = [{ id: 'todo', label: 'To Do', color: 'bg-slate-50' }, { id: 'in_progress', label: 'In Progress', color: 'bg-blue-50' }, { id: 'done', label: 'Completed', color: 'bg-green-50' }];
+            const columns = [{ id: 'todo', label: 'To Do', color: 'bg-[#faf9f8]' }, { id: 'in_progress', label: 'In Progress', color: 'bg-[#eff6fc]' }, { id: 'done', label: 'Completed', color: 'bg-[#dff6dd]' }];
 
             const handleAdd = (e) => {
                 e.preventDefault();
@@ -675,40 +714,40 @@
             return (
                 <div className="space-y-6 pb-4 h-full flex flex-col animate-fade-in">
                     <header className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800">Task Board</h2>
-                        <button onClick={() => setIsAdding(!isAdding)} className="bg-blue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm">{isAdding ? <Lucide.X size={18}/> : <Lucide.Plus size={18}/>} <span className="hidden md:inline">New Task</span><span className="md:hidden">Add</span></button>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Task Board</h2>
+                        <button onClick={() => setIsAdding(!isAdding)} className="bg-white border border-[#edebe9] text-[#323130] px-4 py-2 rounded flex items-center gap-2 shadow-sm hover:bg-[#f3f2f1]">{isAdding ? <Lucide.X size={18}/> : <Lucide.Plus size={18}/>} <span className="hidden md:inline">New Task</span><span className="md:hidden">Add</span></button>
                     </header>
                     {isAdding && (
-                        <form onSubmit={handleAdd} className="bg-white p-4 rounded-xl border border-blue-100 shadow-lg flex flex-col md:flex-row gap-3">
-                            <input type="text" placeholder="Task Description" className="flex-1 px-4 py-2 border rounded-lg text-base" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus />
-                            <input type="text" placeholder="Assign To (Name)" className="md:w-48 px-4 py-2 border rounded-lg text-base" value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value)} />
-                            <button className="bg-green-600 text-white px-6 py-2 rounded-lg">Add</button>
+                        <form onSubmit={handleAdd} className="bg-white p-4 rounded border border-[#0078d4] shadow-sm flex flex-col md:flex-row gap-3">
+                            <input type="text" placeholder="Task Description" className="flex-1 px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus />
+                            <input type="text" placeholder="Assign To (Name)" className="md:w-48 px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value)} />
+                            <button className="bg-[#107c10] text-white px-6 py-2 rounded hover:bg-[#0b5a0b] font-semibold">Add</button>
                         </form>
                     )}
                     <div className="flex-1 overflow-x-auto pb-2">
                         <div className="flex gap-4 min-w-[800px] h-full">
                             {columns.map(col => (
-                                <div key={col.id} className={`flex-1 rounded-xl p-4 flex flex-col gap-3 ${col.color} border border-slate-200`}>
-                                    <h3 className="font-bold text-slate-700 border-b pb-2">{col.label}</h3>
+                                <div key={col.id} className={`flex-1 rounded p-4 flex flex-col gap-3 ${col.color} border border-[#edebe9]`}>
+                                    <h3 className="font-semibold text-[#323130] border-b border-[#edebe9] pb-2">{col.label}</h3>
                                     <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                                         {tasks.filter(t => t.status === col.id).map(task => (
-                                            <div key={task.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group hover:shadow-md transition-all">
+                                            <div key={task.id} className="bg-white p-3 rounded shadow-sm border border-[#edebe9] group hover:border-[#c8c6c4] transition-all">
                                                 <div className="flex justify-between items-start mb-1">
-                                                    <p className="font-medium text-sm text-slate-800">{task.title}</p>
+                                                    <p className="font-semibold text-sm text-[#323130]">{task.title}</p>
                                                     {(user.role === 'Admin' || task.createdBy === user.name) && (
-                                                        <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={14}/></button>
+                                                        <button onClick={() => onDeleteTask(task.id)} className="text-[#a19f9d] hover:text-[#a4262c] opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={14}/></button>
                                                     )}
                                                 </div>
                                                 <div className="flex justify-between items-end mt-2">
-                                                    <div className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600 flex items-center gap-1"><Lucide.User size={10}/> {task.assignee}</div>
+                                                    <div className="text-xs bg-[#f3f2f1] px-2 py-1 rounded text-[#605e5c] flex items-center gap-1"><Lucide.User size={10}/> {task.assignee}</div>
                                                     
                                                     {col.id !== 'done' && (
-                                                        <button onClick={() => handleStatusChange(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-xs text-blue-600 hover:underline">Next &rarr;</button>
+                                                        <button onClick={() => handleStatusChange(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-xs text-[#0078d4] hover:underline font-semibold">Next &rarr;</button>
                                                     )}
                                                     
                                                     {/* Admin Override for status */}
                                                     {user.role === 'Admin' && col.id === 'done' && (
-                                                        <span className="text-xs text-green-600 font-bold flex items-center gap-1"><Lucide.Check size={10}/> Done</span>
+                                                        <span className="text-xs text-[#107c10] font-semibold flex items-center gap-1"><Lucide.Check size={10}/> Done</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -735,27 +774,27 @@
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">Leaves & Vacancy</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Leaves & Vacancy</h2></header>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 className="font-semibold mb-4">Request Leave</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Request Leave</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-2">
-                                    <input type="date" required className="border p-2 rounded text-base" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-                                    <input type="date" required className="border p-2 rounded text-base" value={toDate} onChange={e => setToDate(e.target.value)} />
+                                    <input type="date" required className="border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+                                    <input type="date" required className="border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={toDate} onChange={e => setToDate(e.target.value)} />
                                 </div>
-                                <textarea className="w-full border p-2 rounded text-base h-20" placeholder="Reason..." value={reason} onChange={e => setReason(e.target.value)} />
-                                <button className="w-full bg-blue-900 text-white py-2 rounded text-sm">Submit</button>
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded text-base h-20 focus:ring-2 focus:ring-[#0078d4]" placeholder="Reason..." value={reason} onChange={e => setReason(e.target.value)} />
+                                <button className="w-full bg-[#0078d4] text-white py-2 rounded text-sm font-semibold hover:bg-[#106ebe] shadow-sm">Submit</button>
                             </form>
                         </div>
-                        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                            <div className="p-4 bg-slate-50 border-b border-slate-100 font-semibold text-sm">Leave History</div>
+                        <div className="lg:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                            <div className="p-4 bg-[#f3f2f1] border-b border-[#edebe9] font-semibold text-sm text-[#323130]">Leave History</div>
                             <div className="max-h-[300px] overflow-auto">
                                 <table className="w-full text-sm text-left min-w-[500px]">
-                                    <thead className="text-xs text-slate-500 uppercase bg-slate-50"><tr><th className="px-4 py-2">Name</th><th className="px-4 py-2">Dates</th><th className="px-4 py-2">Status</th></tr></thead>
+                                    <thead className="text-xs text-[#323130] uppercase bg-[#faf9f8]"><tr><th className="px-4 py-2 border-b border-[#edebe9]">Name</th><th className="px-4 py-2 border-b border-[#edebe9]">Dates</th><th className="px-4 py-2 border-b border-[#edebe9]">Status</th></tr></thead>
                                     <tbody>
                                         {leaves.map((l, i) => (
-                                            <tr key={i} className="border-b hover:bg-slate-50"><td className="px-4 py-2">{l.userName}</td><td className="px-4 py-2 text-xs">{l.from} to {l.to}</td><td className="px-4 py-2"><span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-200">{l.status}</span></td></tr>
+                                            <tr key={i} className="border-b border-[#edebe9] hover:bg-[#faf9f8]"><td className="px-4 py-2 text-[#323130]">{l.userName}</td><td className="px-4 py-2 text-xs text-[#605e5c]">{l.from} to {l.to}</td><td className="px-4 py-2"><span className="bg-[#fff4ce] text-[#795c00] text-xs px-2 py-1 rounded border border-[#ffe78c] font-semibold">{l.status}</span></td></tr>
                                         ))}
                                     </tbody>
                                 </table>
@@ -776,24 +815,24 @@
             };
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">End of Day Reports</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">End of Day Reports</h2></header>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 className="font-semibold mb-4">Submit Report</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Submit Report</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <textarea className="w-full border p-3 rounded h-40 resize-none text-base bg-slate-50 focus:bg-white transition-colors" placeholder="Work done today..." value={content} onChange={e => setContent(e.target.value)} />
-                                <button className="w-full bg-blue-900 text-white py-2 rounded text-sm">Submit</button>
+                                <textarea className="w-full border border-[#8a8886] p-3 rounded h-40 resize-none text-base bg-white focus:ring-2 focus:ring-[#0078d4] transition-colors" placeholder="Work done today..." value={content} onChange={e => setContent(e.target.value)} />
+                                <button className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white py-2 rounded text-sm font-semibold shadow-sm">Submit</button>
                             </form>
                         </div>
-                        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-[500px] overflow-auto space-y-4">
-                            <h3 className="font-semibold text-slate-800">Team Submissions</h3>
+                        <div className="lg:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] p-4 h-[500px] overflow-auto space-y-4">
+                            <h3 className="font-semibold text-[#323130]">Team Submissions</h3>
                             {reports.map(r => (
-                                <div key={r.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <div key={r.id} className="bg-[#faf9f8] p-4 rounded border border-[#edebe9]">
                                     <div className="flex justify-between mb-2">
-                                        <span className="font-bold text-sm text-blue-900">{r.userName}</span>
-                                        <span className="text-xs text-slate-400">{r.date}</span>
+                                        <span className="font-semibold text-sm text-[#0078d4]">{r.userName}</span>
+                                        <span className="text-xs text-[#605e5c]">{r.date}</span>
                                     </div>
-                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{r.content}</p>
+                                    <p className="text-sm text-[#323130] whitespace-pre-wrap">{r.content}</p>
                                 </div>
                             ))}
                         </div>
@@ -832,24 +871,24 @@
             };
 
             return (
-                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-                    <div className="p-4 bg-white border-b border-slate-100 font-bold text-slate-700 flex items-center gap-2">
-                        <Lucide.MessageSquare size={18} className="text-blue-600"/> Group Chat
+                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden animate-fade-in">
+                    <div className="p-4 bg-white border-b border-[#edebe9] font-semibold text-[#323130] flex items-center gap-2 shadow-sm z-10">
+                        <Lucide.MessageSquare size={18} className="text-[#0078d4]"/> Group Chat
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f8]">
                         {messages.map(m => (
                             <div key={m.id} className={`flex gap-2 ${m.userId === user.uid ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden shadow-sm">
-                                     {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">{m.userName.charAt(0)}</div>}
+                                <div className="w-8 h-8 rounded-full bg-white border border-[#edebe9] flex-shrink-0 overflow-hidden shadow-sm">
+                                     {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-[#605e5c]">{m.userName.charAt(0)}</div>}
                                 </div>
-                                <div className={`max-w-[75%] p-3 rounded-2xl text-sm shadow-sm ${m.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>
-                                    <p className="font-bold text-xs opacity-70 mb-1">{m.userName}</p>
+                                <div className={`max-w-[75%] p-3 rounded text-sm shadow-sm ${m.userId === user.uid ? 'bg-[#0078d4] text-white rounded-tr-none' : 'bg-white border border-[#edebe9] text-[#323130] rounded-tl-none'}`}>
+                                    <p className="font-semibold text-xs opacity-80 mb-1">{m.userName}</p>
                                     {m.type === 'pdf' ? (
-                                        <div className="flex items-center gap-2 bg-black/10 p-2 rounded-lg">
+                                        <div className="flex items-center gap-2 bg-black/10 p-2 rounded">
                                             <Lucide.FileText size={24} className="flex-shrink-0" />
                                             <div className="overflow-hidden">
-                                                <p className="truncate font-medium">{m.fileName}</p>
-                                                <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-bold mt-1 inline-block">Download PDF</a>
+                                                <p className="truncate font-semibold">{m.fileName}</p>
+                                                <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-semibold mt-1 inline-block">Download PDF</a>
                                             </div>
                                         </div>
                                     ) : (<p>{m.text}</p>)}
@@ -858,13 +897,13 @@
                         ))}
                         <div ref={bottomRef} />
                     </div>
-                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-slate-100 bg-white flex gap-2 items-center">
+                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-[#edebe9] bg-white flex gap-2 items-center">
                         <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
-                        <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-blue-600 p-2 rounded-full transition-colors bg-slate-50" disabled={isUploading}>
+                        <button type="button" onClick={() => fileInputRef.current.click()} className="text-[#605e5c] hover:text-[#0078d4] p-2 rounded transition-colors bg-[#f3f2f1]" disabled={isUploading}>
                             {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
                         </button>
-                        <input type="text" className="flex-1 bg-slate-50 border-0 rounded-full px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-blue-100" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
-                        <button className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 flex-shrink-0 shadow-md shadow-blue-200"><Lucide.Send size={18}/></button>
+                        <input type="text" className="flex-1 bg-white border border-[#8a8886] rounded px-4 py-2 text-base md:text-sm focus:ring-2 focus:ring-[#0078d4] outline-none" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
+                        <button className="bg-[#0078d4] text-white p-2 rounded hover:bg-[#106ebe] flex-shrink-0 shadow-sm"><Lucide.Send size={18}/></button>
                     </form>
                 </div>
             );
@@ -879,30 +918,29 @@
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-bold text-slate-800">My Progress</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">My Progress</h2></header>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-full -mr-8 -mt-8"></div>
-                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2 relative z-10">Task Efficiency</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9] relative overflow-hidden">
+                            <h3 className="text-[#605e5c] text-xs font-semibold uppercase mb-2 relative z-10">Task Efficiency</h3>
                             <div className="flex items-end gap-2 mb-2 relative z-10">
-                                <span className="text-4xl font-bold text-blue-600">{progress}%</span>
+                                <span className="text-4xl font-semibold text-[#0078d4]">{progress}%</span>
                             </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 relative z-10">
-                                <div className="bg-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${progress}%`}}></div>
-                            </div>
-                        </div>
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Attendance Streak</h3>
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-green-100 text-green-600 rounded-xl"><Lucide.CalendarCheck size={24} /></div>
-                                <div><span className="text-2xl font-bold text-slate-800">{presentDays}</span><p className="text-xs text-slate-500">Days Present</p></div>
+                            <div className="w-full bg-[#f3f2f1] rounded h-2 relative z-10 border border-[#edebe9]">
+                                <div className="bg-[#0078d4] h-2 rounded transition-all duration-1000" style={{width: `${progress}%`}}></div>
                             </div>
                         </div>
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Reports Submitted</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="text-[#605e5c] text-xs font-semibold uppercase mb-2">Attendance Streak</h3>
                             <div className="flex items-center gap-3">
-                                <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><Lucide.FileText size={24} /></div>
-                                <div><span className="text-2xl font-bold text-slate-800">{reports.filter(r => r.userId === user.uid).length}</span><p className="text-xs text-slate-500">EODs Filed</p></div>
+                                <div className="p-3 bg-[#dff6dd] text-[#107c10] rounded"><Lucide.CalendarCheck size={24} /></div>
+                                <div><span className="text-2xl font-semibold text-[#323130]">{presentDays}</span><p className="text-xs text-[#605e5c]">Days Present</p></div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="text-[#605e5c] text-xs font-semibold uppercase mb-2">Reports Submitted</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-[#eff6fc] text-[#0078d4] rounded"><Lucide.FileText size={24} /></div>
+                                <div><span className="text-2xl font-semibold text-[#323130]">{reports.filter(r => r.userId === user.uid).length}</span><p className="text-xs text-[#605e5c]">EODs Filed</p></div>
                             </div>
                         </div>
                     </div>
@@ -925,31 +963,616 @@
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
                     <header>
-                        <h2 className="text-2xl font-bold text-slate-800">Idea Hub</h2>
-                        <p className="text-slate-500">Work Process Idea Center</p>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Idea Hub</h2>
+                        <p className="text-[#605e5c]">Work Process Idea Center</p>
                     </header>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Lucide.Lightbulb size={18} className="text-yellow-500"/> Submit Idea</h3>
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4 flex items-center gap-2"><Lucide.Lightbulb size={18} className="text-[#d83b01]"/> Submit Idea</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <input type="text" className="w-full border p-2 rounded text-base" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
-                                <select className="w-full border p-2 rounded text-base bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                <input type="text" className="w-full border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                <select className="w-full border border-[#8a8886] p-2 rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={category} onChange={e=>setCategory(e.target.value)}>
                                     <option>Process Improvement</option><option>Cost Saving</option><option>Culture</option><option>Safety</option>
                                 </select>
-                                <textarea className="w-full border p-2 rounded text-base h-32 resize-none" placeholder="Description..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
-                                <button className="w-full bg-blue-900 text-white py-2 rounded font-medium">Submit</button>
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded text-base h-32 resize-none focus:ring-2 focus:ring-[#0078d4]" placeholder="Description..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white py-2 rounded font-semibold shadow-sm">Submit</button>
                             </form>
                         </div>
                         <div className="lg:col-span-2 space-y-4">
                             {ideas.map(idea => (
-                                <div key={idea.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                                    <div className="flex justify-between items-start mb-2"><span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-bold">{idea.category}</span><span className="text-xs text-slate-400">{idea.userName}</span></div>
-                                    <h4 className="font-bold text-slate-800 text-lg mb-1">{idea.title}</h4>
-                                    <p className="text-slate-600 text-sm">{idea.description}</p>
+                                <div key={idea.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                                    <div className="flex justify-between items-start mb-2"><span className="bg-[#f3f2f1] text-[#323130] border border-[#edebe9] text-xs px-2 py-1 rounded font-semibold">{idea.category}</span><span className="text-xs text-[#605e5c]">{idea.userName}</span></div>
+                                    <h4 className="font-semibold text-[#323130] text-lg mb-1">{idea.title}</h4>
+                                    <p className="text-[#605e5c] text-sm">{idea.description}</p>
                                 </div>
                             ))}
-                            {ideas.length === 0 && <div className="text-center py-10 text-slate-400">No ideas yet. Share yours!</div>}
+                            {ideas.length === 0 && <div className="text-center py-10 text-[#605e5c]">No ideas yet. Share yours!</div>}
                         </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ADVANCED MODULES ---
+
+        const MeetingsModule = ({ user, meetings, onScheduleMeeting, onDeleteMeeting }) => {
+            const [title, setTitle] = useState('');
+            const [date, setDate] = useState('');
+            const [time, setTime] = useState('');
+            const [link, setLink] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!title || !date || !time) return;
+                onScheduleMeeting({ title, date, time, link, hostId: user.uid, hostName: user.name, timestamp: serverTimestamp() });
+                setTitle(''); setDate(''); setTime(''); setLink('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Meeting Scheduler</h2>
+                        <p className="text-[#605e5c] text-sm">Organize and join team meetings.</p>
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Schedule a Meeting</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-[#605e5c]">Topic / Title</label>
+                                    <input type="text" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-semibold text-[#605e5c]">Date</label>
+                                        <input type="date" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" value={date} onChange={e=>setDate(e.target.value)} required />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-semibold text-[#605e5c]">Time</label>
+                                        <input type="time" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" value={time} onChange={e=>setTime(e.target.value)} required />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-[#605e5c]">Meeting Link / Room</label>
+                                    <input type="text" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" placeholder="e.g. Teams, Zoom, or Room 4A" value={link} onChange={e=>setLink(e.target.value)} />
+                                </div>
+                                <button className="w-full bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm mt-2">Schedule</button>
+                            </form>
+                        </div>
+
+                        <div className="lg:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                            <div className="p-4 bg-[#f3f2f1] border-b border-[#edebe9] font-semibold text-[#323130]">Upcoming Meetings</div>
+                            <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
+                                {meetings.map(meet => (
+                                    <div key={meet.id} className="border border-[#edebe9] p-4 rounded flex justify-between items-start hover:border-[#0078d4] transition-colors relative group">
+                                        {(user.role === 'Admin' || meet.hostId === user.uid) && (
+                                            <button onClick={()=>onDeleteMeeting(meet.id)} className="absolute top-4 right-4 text-[#a19f9d] hover:text-[#a4262c] opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={16}/></button>
+                                        )}
+                                        <div className="flex gap-4">
+                                            <div className="flex flex-col items-center justify-center bg-[#eff6fc] text-[#0078d4] p-3 rounded min-w-[70px]">
+                                                <span className="text-xs font-bold uppercase">{new Date(meet.date).toLocaleString('default', { month: 'short' })}</span>
+                                                <span className="text-2xl font-bold leading-none">{new Date(meet.date).getDate()}</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-semibold text-lg text-[#323130] pr-6">{meet.title}</h4>
+                                                <div className="flex items-center gap-3 text-sm text-[#605e5c] mt-1">
+                                                    <span className="flex items-center gap-1"><Lucide.Clock size={14}/> {meet.time}</span>
+                                                    <span className="flex items-center gap-1"><Lucide.User size={14}/> {meet.hostName}</span>
+                                                </div>
+                                                {meet.link && (
+                                                    <a href={meet.link.startsWith('http') ? meet.link : `https://${meet.link}`} target="_blank" rel="noreferrer" className="text-[#0078d4] text-sm font-semibold mt-2 inline-flex items-center gap-1 hover:underline">
+                                                        <Lucide.Video size={14}/> Join Meeting
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {meetings.length === 0 && <div className="text-center py-10 text-[#605e5c]">No upcoming meetings scheduled.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TrainingModule = ({ user, trainings, onAddTraining, onMarkComplete, onDeleteTraining }) => {
+            const [title, setTitle] = useState('');
+            const [desc, setDesc] = useState('');
+            const [link, setLink] = useState('');
+            
+            const handleAdd = (e) => {
+                e.preventDefault();
+                if(!title || !link) return;
+                onAddTraining({ title, description: desc, link, addedBy: user.name, completions: [], timestamp: serverTimestamp() });
+                setTitle(''); setDesc(''); setLink('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Learning & Training Hub</h2>
+                        <p className="text-[#605e5c] text-sm">Enhance your skills with company resources.</p>
+                    </header>
+
+                    {user.role === 'Admin' && (
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Add Training Resource</h3>
+                            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Course Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                <input type="url" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Resource Link (Video/Doc)" value={link} onChange={e=>setLink(e.target.value)} required />
+                                <div className="md:col-span-2 flex gap-4 items-end">
+                                    <input type="text" className="flex-1 border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Short Description..." value={desc} onChange={e=>setDesc(e.target.value)} />
+                                    <button className="bg-[#107c10] text-white px-6 py-2 rounded font-semibold hover:bg-[#0b5a0b] shadow-sm">Publish Course</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {trainings.map(t => {
+                            const isCompleted = t.completions && t.completions.includes(user.uid);
+                            return (
+                                <div key={t.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#0078d4] transition-all flex flex-col relative group">
+                                    {user.role === 'Admin' && (
+                                        <button onClick={()=>onDeleteTraining(t.id)} className="absolute top-4 right-4 text-[#a19f9d] hover:text-[#a4262c] opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={16}/></button>
+                                    )}
+                                    <div className="flex items-start gap-3 mb-3 pr-6">
+                                        <div className="p-2 bg-[#f3f2f1] text-[#0078d4] rounded border border-[#edebe9]"><Lucide.GraduationCap size={20}/></div>
+                                        <div>
+                                            <h4 className="font-semibold text-[#323130] line-clamp-2">{t.title}</h4>
+                                            <p className="text-xs text-[#605e5c] mt-1 line-clamp-2">{t.description}</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-auto pt-4 border-t border-[#edebe9] flex justify-between items-center">
+                                        <a href={t.link} target="_blank" rel="noreferrer" className="text-sm text-[#0078d4] font-semibold hover:underline">Start Learning &rarr;</a>
+                                        {isCompleted ? (
+                                            <span className="text-xs text-[#107c10] font-semibold flex items-center gap-1"><Lucide.CheckCircle size={14}/> Completed</span>
+                                        ) : (
+                                            <button onClick={()=>{
+                                                const newCompletions = t.completions ? [...t.completions, user.uid] : [user.uid];
+                                                onMarkComplete(t.id, newCompletions);
+                                            }} className="text-xs bg-[#f3f2f1] hover:bg-[#dff6dd] hover:text-[#107c10] px-2 py-1 rounded border border-[#edebe9] transition-colors font-medium">Mark Done</button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {trainings.length === 0 && <div className="col-span-full text-center py-10 text-[#605e5c]">No training modules assigned yet.</div>}
+                    </div>
+                </div>
+            );
+        };
+        
+        const AssetsModule = ({ user, assets, allUsers, onAddAsset, onAssignAsset, onDeleteAsset }) => {
+            const [name, setName] = useState('');
+            const [type, setType] = useState('Laptop');
+            const [serial, setSerial] = useState('');
+            
+            const handleAdd = (e) => {
+                e.preventDefault();
+                if(!name || !serial) return;
+                onAddAsset({ name, type, serialNumber: serial, status: 'Available', assignedTo: null, assignedName: '', addedAt: serverTimestamp() });
+                setName(''); setSerial('');
+            };
+
+            const myAssets = assets.filter(a => a.assignedTo === user.uid);
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Asset Management</h2></header>
+                    
+                    {user.role === 'Admin' && (
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Add New Asset</h3>
+                            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Asset Name (e.g. MacBook Pro)" value={name} onChange={e=>setName(e.target.value)} required />
+                                <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" value={type} onChange={e=>setType(e.target.value)}>
+                                    <option>Laptop</option><option>Mobile Phone</option><option>Monitor</option><option>Software License</option><option>Other</option>
+                                </select>
+                                <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Serial / License Key" value={serial} onChange={e=>setSerial(e.target.value)} required />
+                                <button className="bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Add Asset</button>
+                            </form>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {user.role === 'Admin' ? (
+                            <div className="md:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                                <div className="p-4 bg-[#f3f2f1] border-b border-[#edebe9] font-semibold text-[#323130]">Company Assets Inventory</div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-[#faf9f8] text-[#605e5c] text-xs uppercase">
+                                            <tr><th className="px-4 py-3">Asset</th><th className="px-4 py-3">Serial/Key</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Assignment</th><th className="px-4 py-3 text-right">Actions</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#edebe9]">
+                                            {assets.map(a => (
+                                                <tr key={a.id} className="hover:bg-[#faf9f8]">
+                                                    <td className="px-4 py-3 font-medium text-[#323130]"><div className="flex items-center gap-2"><Lucide.MonitorSmartphone size={16} className="text-[#0078d4]"/> {a.name} <span className="text-xs text-[#605e5c]">({a.type})</span></div></td>
+                                                    <td className="px-4 py-3 font-mono text-xs text-[#605e5c]">{a.serialNumber}</td>
+                                                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded text-xs font-semibold ${a.status==='Available'?'bg-[#dff6dd] text-[#107c10]':'bg-[#eff6fc] text-[#0078d4]'}`}>{a.status}</span></td>
+                                                    <td className="px-4 py-3">
+                                                        {a.status === 'Available' ? (
+                                                            <select className="text-xs border border-[#8a8886] rounded p-1" onChange={(e) => {
+                                                                const uid = e.target.value;
+                                                                if(!uid) return;
+                                                                const emp = allUsers.find(u=>u.id===uid);
+                                                                onAssignAsset(a.id, {status: 'Assigned', assignedTo: uid, assignedName: emp.name});
+                                                            }}>
+                                                                <option value="">Assign to...</option>
+                                                                {allUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                                                            </select>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2 text-xs font-medium">
+                                                                {a.assignedName} 
+                                                                <button onClick={()=>onAssignAsset(a.id, {status: 'Available', assignedTo: null, assignedName: ''})} className="text-[#a4262c] hover:underline">Revoke</button>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right"><button onClick={()=>onDeleteAsset(a.id)} className="text-[#a4262c] text-xs font-semibold hover:underline"><Lucide.Trash2 size={16}/></button></td>
+                                                </tr>
+                                            ))}
+                                            {assets.length === 0 && <tr><td colSpan="5" className="text-center py-6 text-[#605e5c]">No assets recorded.</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="md:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] p-6">
+                                <h3 className="font-semibold text-[#323130] border-b border-[#edebe9] pb-3 mb-4">My Assigned Assets</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {myAssets.map(a => (
+                                        <div key={a.id} className="border border-[#edebe9] rounded p-4 flex items-start gap-4 hover:border-[#0078d4] transition-colors">
+                                            <div className="p-3 bg-[#eff6fc] text-[#0078d4] rounded-full"><Lucide.MonitorSmartphone size={24}/></div>
+                                            <div>
+                                                <h4 className="font-semibold text-[#323130]">{a.name}</h4>
+                                                <p className="text-xs text-[#605e5c] uppercase tracking-wider mb-1">{a.type}</p>
+                                                <p className="text-xs font-mono text-[#605e5c] bg-[#f3f2f1] px-2 py-0.5 rounded inline-block border border-[#edebe9]">SN: {a.serialNumber}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {myAssets.length === 0 && <div className="col-span-3 py-10 text-center text-[#605e5c] border border-dashed border-[#edebe9] rounded">You have no assets assigned to you currently.</div>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const ExpensesModule = ({ user, expenses, onSubmitExpense, onUpdateExpense }) => {
+            const [title, setTitle] = useState('');
+            const [amount, setAmount] = useState('');
+            const [category, setCategory] = useState('Travel');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!title || !amount) return;
+                onSubmitExpense({ title, amount: parseFloat(amount), category, status: 'Pending', userId: user.uid, userName: user.name, date: new Date().toLocaleDateString(), timestamp: serverTimestamp() });
+                setTitle(''); setAmount('');
+            };
+
+            const myExpenses = expenses.filter(ex => ex.userId === user.uid);
+            const adminPending = expenses.filter(ex => ex.status === 'Pending');
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Expense Claims</h2></header>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Submit New Claim</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-[#605e5c]">Description</label>
+                                    <input type="text" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-semibold text-[#605e5c]">Amount (₹)</label>
+                                        <input type="number" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" value={amount} onChange={e=>setAmount(e.target.value)} required />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-semibold text-[#605e5c]">Category</label>
+                                        <select className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1 bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                            <option>Travel</option><option>Meals</option><option>Office Supplies</option><option>Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button className="w-full bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm mt-2">Submit Claim</button>
+                            </form>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-6">
+                            {user.role === 'Admin' && adminPending.length > 0 && (
+                                <div className="bg-white rounded shadow-sm border border-[#fde7e9] overflow-hidden">
+                                    <div className="p-4 bg-[#fde7e9] text-[#a4262c] font-semibold border-b border-[#fbd3d6] flex justify-between items-center">
+                                        <span>Action Required: Pending Approvals</span>
+                                        <span className="bg-[#a4262c] text-white px-2 py-0.5 rounded text-xs">{adminPending.length}</span>
+                                    </div>
+                                    <div className="p-4 space-y-3">
+                                        {adminPending.map(ex => (
+                                            <div key={ex.id} className="flex justify-between items-center p-3 border border-[#edebe9] rounded bg-[#faf9f8]">
+                                                <div>
+                                                    <p className="font-semibold text-[#323130]">{ex.title} <span className="font-normal text-[#605e5c] text-sm ml-2">by {ex.userName}</span></p>
+                                                    <p className="text-xs text-[#605e5c] mt-0.5">{ex.category} &bull; {ex.date}</p>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="font-bold text-lg text-[#323130]">₹{ex.amount}</span>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={()=>onUpdateExpense(ex.id, {status: 'Approved'})} className="p-2 bg-[#dff6dd] text-[#107c10] rounded hover:bg-[#c3f1c0]"><Lucide.Check size={18}/></button>
+                                                        <button onClick={()=>onUpdateExpense(ex.id, {status: 'Rejected'})} className="p-2 bg-[#fde7e9] text-[#a4262c] rounded hover:bg-[#fbd3d6]"><Lucide.X size={18}/></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                                <div className="p-4 bg-[#f3f2f1] border-b border-[#edebe9] font-semibold text-[#323130]">My Expense History</div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-[#faf9f8] text-[#605e5c] text-xs uppercase">
+                                            <tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Description</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#edebe9]">
+                                            {myExpenses.map(ex => (
+                                                <tr key={ex.id} className="hover:bg-[#faf9f8]">
+                                                    <td className="px-4 py-3 text-xs text-[#605e5c]">{ex.date}</td>
+                                                    <td className="px-4 py-3 font-medium text-[#323130]">{ex.title}</td>
+                                                    <td className="px-4 py-3 text-xs text-[#605e5c]">{ex.category}</td>
+                                                    <td className="px-4 py-3 font-semibold text-[#323130]">₹{ex.amount}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${ex.status==='Pending'?'bg-[#fff4ce] text-[#795c00]': ex.status==='Approved' ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#fde7e9] text-[#a4262c]'}`}>{ex.status}</span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {myExpenses.length === 0 && <tr><td colSpan="5" className="text-center py-6 text-[#605e5c]">No expenses filed yet.</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const OKRModule = ({ user, okrs, onSubmitOKR, onUpdateProgress, onDeleteOKR }) => {
+            const [objective, setObjective] = useState('');
+            const [quarter, setQuarter] = useState('Q3-2026');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!objective) return;
+                onSubmitOKR({ objective, progress: 0, quarter, userId: user.uid, userName: user.name, timestamp: serverTimestamp() });
+                setObjective('');
+            };
+
+            const displayOKRs = user.role === 'Admin' ? okrs : okrs.filter(o => o.userId === user.uid);
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Objectives & Key Results (OKRs)</h2>
+                        <p className="text-[#605e5c] text-sm">Align individual goals with company vision.</p>
+                    </header>
+
+                    <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
+                            <div className="flex-1 w-full">
+                                <label className="text-xs font-semibold text-[#605e5c]">New Objective</label>
+                                <input type="text" className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1" placeholder="e.g. Increase customer retention by 15%" value={objective} onChange={e=>setObjective(e.target.value)} required />
+                            </div>
+                            <div className="w-full md:w-48">
+                                <label className="text-xs font-semibold text-[#605e5c]">Timeline</label>
+                                <select className="w-full border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] mt-1 bg-white" value={quarter} onChange={e=>setQuarter(e.target.value)}>
+                                    <option>Q1-2026</option><option>Q2-2026</option><option>Q3-2026</option><option>Q4-2026</option>
+                                </select>
+                            </div>
+                            <button className="w-full md:w-auto bg-[#107c10] text-white px-6 py-2 rounded font-semibold hover:bg-[#0b5a0b] shadow-sm">Set Goal</button>
+                        </form>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {displayOKRs.map(okr => (
+                            <div key={okr.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-colors relative">
+                                {(user.role === 'Admin' || okr.userId === user.uid) && (
+                                    <button onClick={()=>onDeleteOKR(okr.id)} className="absolute top-4 right-4 text-[#a19f9d] hover:text-[#a4262c]"><Lucide.Trash2 size={16}/></button>
+                                )}
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="px-2 py-0.5 bg-[#f3f2f1] text-[#605e5c] text-xs font-semibold rounded">{okr.quarter}</span>
+                                    {user.role === 'Admin' && <span className="text-xs text-[#0078d4] font-semibold">{okr.userName}</span>}
+                                </div>
+                                <h3 className="font-semibold text-lg text-[#323130] pr-6 mb-4">{okr.objective}</h3>
+                                
+                                <div>
+                                    <div className="flex justify-between text-xs font-semibold text-[#605e5c] mb-1">
+                                        <span>Progress</span>
+                                        <span className={okr.progress === 100 ? 'text-[#107c10]' : 'text-[#0078d4]'}>{okr.progress}%</span>
+                                    </div>
+                                    {okr.userId === user.uid ? (
+                                        <input 
+                                            type="range" min="0" max="100" step="5" value={okr.progress}
+                                            onChange={(e)=>onUpdateProgress(okr.id, parseInt(e.target.value))}
+                                        />
+                                    ) : (
+                                        <div className="w-full bg-[#f3f2f1] rounded h-2 border border-[#edebe9]">
+                                            <div className="bg-[#0078d4] h-2 rounded transition-all duration-300" style={{width: `${okr.progress}%`}}></div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {displayOKRs.length === 0 && <div className="col-span-full text-center py-10 text-[#605e5c]">No objectives set yet.</div>}
+                    </div>
+                </div>
+            );
+        };
+
+        const VaultModule = ({ user, documents, onAddDocument, onDeleteDocument }) => {
+            const [title, setTitle] = useState('');
+            const [link, setLink] = useState('');
+            const [category, setCategory] = useState('Policy');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!title || !link) return;
+                onAddDocument({ title, link, category, uploadedBy: user.name, timestamp: serverTimestamp() });
+                setTitle(''); setLink('');
+            };
+
+            const getIcon = (cat) => {
+                if(cat==='Policy') return <Lucide.ShieldCheck size={24} className="text-[#a4262c]" />;
+                if(cat==='Template') return <Lucide.FileText size={24} className="text-[#0078d4]" />;
+                return <Lucide.BookOpen size={24} className="text-[#107c10]" />;
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Document Vault</h2>
+                        <p className="text-[#605e5c] text-sm">Centralized company resources and policies.</p>
+                    </header>
+
+                    {user.role === 'Admin' && (
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Publish Document Link</h3>
+                            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Document Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                    <option>Policy</option><option>Template</option><option>Guide</option>
+                                </select>
+                                <input type="url" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="URL (Google Drive, Sharepoint...)" value={link} onChange={e=>setLink(e.target.value)} required />
+                                <button className="bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Publish Link</button>
+                            </form>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {documents.map(doc => (
+                            <a key={doc.id} href={doc.link} target="_blank" rel="noopener noreferrer" className="block bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#0078d4] hover:shadow-md transition-all group relative">
+                                {user.role === 'Admin' && (
+                                    <button onClick={(e)=>{e.preventDefault(); onDeleteDocument(doc.id);}} className="absolute top-4 right-4 text-[#a19f9d] hover:text-[#a4262c]"><Lucide.Trash2 size={16}/></button>
+                                )}
+                                <div className="flex items-center gap-4 mb-3">
+                                    <div className="p-3 bg-[#f3f2f1] rounded-lg border border-[#edebe9] group-hover:bg-[#eff6fc] transition-colors">{getIcon(doc.category)}</div>
+                                    <div>
+                                        <p className="text-xs font-semibold text-[#605e5c] uppercase tracking-wider">{doc.category}</p>
+                                        <h3 className="font-semibold text-[#323130] group-hover:text-[#0078d4] transition-colors line-clamp-1">{doc.title}</h3>
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center text-xs text-[#605e5c] border-t border-[#edebe9] pt-3 mt-3">
+                                    <span>By {doc.uploadedBy}</span>
+                                    <span className="flex items-center gap-1">Open <Lucide.ExternalLink size={12}/></span>
+                                </div>
+                            </a>
+                        ))}
+                        {documents.length === 0 && <div className="col-span-full py-10 text-center text-[#605e5c]">No documents in the vault.</div>}
+                    </div>
+                </div>
+            );
+        };
+
+        // NEW ADVANCED FEATURE: CRM MODULE
+        const CRMModule = ({ user, clients, onAddClient, onUpdateClient, onDeleteClient }) => {
+            const [name, setName] = useState('');
+            const [company, setCompany] = useState('');
+            const [phone, setPhone] = useState('');
+            const [email, setEmail] = useState('');
+            const [status, setStatus] = useState('Lead');
+            const [selectedClient, setSelectedClient] = useState(null);
+            const [note, setNote] = useState('');
+
+            const handleAdd = (e) => {
+                e.preventDefault();
+                if(!name || !phone) return;
+                onAddClient({ name, company, phone, email, status, addedBy: user.name, logs: [], timestamp: serverTimestamp() });
+                setName(''); setCompany(''); setPhone(''); setEmail('');
+            };
+
+            const handleAddNote = (e, clientId, logs) => {
+                e.preventDefault();
+                if(!note) return;
+                const updatedLogs = [...(logs || []), { text: note, date: new Date().toLocaleString(), by: user.name }];
+                onUpdateClient(clientId, { logs: updatedLogs });
+                setNote('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Client Relationship Management (CRM)</h2>
+                        <p className="text-[#605e5c] text-sm">Manage client details, leads, and call logs securely.</p>
+                    </header>
+
+                    <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                        <h3 className="font-semibold text-[#323130] mb-4">Add New Client/Lead</h3>
+                        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Client Name" value={name} onChange={e=>setName(e.target.value)} required />
+                            <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Company Name" value={company} onChange={e=>setCompany(e.target.value)} />
+                            <input type="tel" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Phone Number" value={phone} onChange={e=>setPhone(e.target.value)} required />
+                            <input type="email" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Email Address" value={email} onChange={e=>setEmail(e.target.value)} />
+                            <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] bg-white" value={status} onChange={e=>setStatus(e.target.value)}>
+                                <option>Lead</option><option>Active Client</option><option>Inactive</option>
+                            </select>
+                            <div className="md:col-span-5"><button className="bg-[#0078d4] text-white px-6 py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Save Client</button></div>
+                        </form>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                        {clients.map(client => (
+                            <div key={client.id} className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                                <div className="p-4 flex flex-col md:flex-row justify-between md:items-center gap-4 hover:bg-[#faf9f8] cursor-pointer" onClick={() => setSelectedClient(selectedClient === client.id ? null : client.id)}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-[#eff6fc] text-[#0078d4] flex items-center justify-center font-bold flex-shrink-0">{client.name.charAt(0)}</div>
+                                        <div>
+                                            <h4 className="font-semibold text-[#323130] text-lg">{client.name} {client.company && <span className="text-sm font-normal text-[#605e5c]">({client.company})</span>}</h4>
+                                            <div className="flex flex-wrap gap-3 text-xs text-[#605e5c] mt-1">
+                                                <span className="flex items-center gap-1"><Lucide.Phone size={12}/> {client.phone}</span>
+                                                {client.email && <span className="flex items-center gap-1"><Lucide.Mail size={12}/> {client.email}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <select 
+                                            className={`text-xs font-semibold px-2 py-1 rounded border outline-none ${client.status === 'Active Client' ? 'bg-[#dff6dd] text-[#107c10] border-[#c3f1c0]' : client.status === 'Lead' ? 'bg-[#fff4ce] text-[#795c00] border-[#ffe78c]' : 'bg-[#f3f2f1] text-[#605e5c] border-[#edebe9]'}`}
+                                            value={client.status}
+                                            onChange={(e) => { e.stopPropagation(); onUpdateClient(client.id, {status: e.target.value}); }}
+                                        >
+                                            <option value="Lead">Lead</option><option value="Active Client">Active Client</option><option value="Inactive">Inactive</option>
+                                        </select>
+                                        {(user.role === 'Admin' || user.email === CRM_EMAIL) && (
+                                            <button onClick={(e)=>{ e.stopPropagation(); if(confirm('Delete client?')) onDeleteClient(client.id); }} className="text-[#a19f9d] hover:text-[#a4262c]"><Lucide.Trash2 size={16}/></button>
+                                        )}
+                                        <Lucide.ChevronDown size={20} className={`text-[#605e5c] transition-transform ${selectedClient === client.id ? 'rotate-180' : ''}`} />
+                                    </div>
+                                </div>
+                                
+                                {selectedClient === client.id && (
+                                    <div className="p-4 border-t border-[#edebe9] bg-[#faf9f8] animate-fade-in">
+                                        <h5 className="text-sm font-semibold text-[#323130] mb-3 flex items-center gap-2"><Lucide.History size={16}/> Call Logs & Notes</h5>
+                                        <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                            {(client.logs || []).map((log, i) => (
+                                                <div key={i} className="bg-white p-3 rounded border border-[#edebe9] text-sm">
+                                                    <p className="text-[#323130]">{log.text}</p>
+                                                    <p className="text-xs text-[#605e5c] mt-1">{log.date} by {log.by}</p>
+                                                </div>
+                                            ))}
+                                            {(!client.logs || client.logs.length === 0) && <p className="text-xs text-[#605e5c]">No communication logs added yet.</p>}
+                                        </div>
+                                        <form onSubmit={(e) => handleAddNote(e, client.id, client.logs)} className="flex gap-2">
+                                            <input type="text" className="flex-1 border border-[#8a8886] p-2 rounded text-sm focus:ring-2 focus:ring-[#0078d4]" placeholder="Type a note or call summary..." value={note} onChange={e=>setNote(e.target.value)} />
+                                            <button className="bg-[#107c10] text-white px-4 py-2 rounded text-sm font-semibold hover:bg-[#0b5a0b] flex items-center gap-2"><Lucide.Plus size={16}/> Add Note</button>
+                                        </form>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {clients.length === 0 && <div className="text-center py-10 text-[#605e5c] bg-white rounded shadow-sm border border-[#edebe9]">No clients in the CRM. Add one above.</div>}
                     </div>
                 </div>
             );
@@ -964,7 +1587,7 @@
             const [activeTab, setActiveTab] = useState('dashboard');
             const [sidebarOpen, setSidebarOpen] = useState(false);
             
-            // Data
+            // Standard Data Arrays
             const [attendanceLogs, setAttendanceLogs] = useState([]);
             const [tasks, setTasks] = useState([]);
             const [leaves, setLeaves] = useState([]);
@@ -974,6 +1597,15 @@
             const [ideas, setIdeas] = useState([]);
             const [announcements, setAnnouncements] = useState([]);
             const [tickets, setTickets] = useState([]);
+
+            // Advanced Data Arrays
+            const [assets, setAssets] = useState([]);
+            const [expenses, setExpenses] = useState([]);
+            const [okrs, setOkrs] = useState([]);
+            const [documents, setDocuments] = useState([]);
+            const [meetings, setMeetings] = useState([]);
+            const [trainings, setTrainings] = useState([]);
+            const [clients, setClients] = useState([]);
 
             // Persistent Login
             useEffect(() => {
@@ -999,20 +1631,15 @@
                 
                 const unsub1 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), s => setAttendanceLogs(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 
-                // Tasks Listener & Auto-Delete Logic
                 const unsub2 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), s => {
                     const taskList = s.docs.map(d => ({id: d.id, ...d.data()}));
                     setTasks(taskList);
-                    
-                    // Auto-delete completed tasks older than 24 hours (Only Admin triggers this to save writes)
                     if (profile.role === 'Admin') {
                         const now = Date.now();
                         taskList.forEach(task => {
                             if (task.status === 'done' && task.completedAt) {
-                                const completedTime = task.completedAt.toDate().getTime();
-                                if (now - completedTime > 24 * 60 * 60 * 1000) { // 24 hours
-                                    deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', task.id));
-                                }
+                                const completedTime = task.completedAt.toDate ? task.completedAt.toDate().getTime() : Date.now();
+                                if (now - completedTime > 24 * 60 * 60 * 1000) { deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', task.id)); }
                             }
                         });
                     }
@@ -1036,6 +1663,15 @@
                 const unsub8 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), orderBy('timestamp', 'desc')), s => setAnnouncements(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub9 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), orderBy('timestamp', 'desc')), s => setTickets(s.docs.map(d => ({id: d.id, ...d.data()}))));
 
+                // Advanced Features Subscriptions
+                const unsub10 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'assets'), orderBy('addedAt', 'desc')), s => setAssets(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub11 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'expenses'), orderBy('timestamp', 'desc')), s => setExpenses(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub12 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'okrs'), orderBy('timestamp', 'desc')), s => setOkrs(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub13 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'documents'), orderBy('timestamp', 'desc')), s => setDocuments(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub14 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'meetings'), orderBy('timestamp', 'desc')), s => setMeetings(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub15 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'trainings'), orderBy('timestamp', 'desc')), s => setTrainings(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub16 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'clients'), orderBy('timestamp', 'desc')), s => setClients(s.docs.map(d => ({id: d.id, ...d.data()}))));
+
                 let unsub6 = () => {};
                 if (profile.role === 'Admin') {
                     unsub6 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), s => setAllUsers(s.docs.map(d => ({id: d.id, ...d.data()}))));
@@ -1043,7 +1679,7 @@
                     setAllUsers([]);
                 }
                 
-                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); };
+                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10(); unsub11(); unsub12(); unsub13(); unsub14(); unsub15(); unsub16(); };
             }, [user, profile]);
 
             const handleLogout = async () => { await signOut(auth); setProfile(null); };
@@ -1052,62 +1688,75 @@
             if (!user || !profile) return <LoginScreen onJoin={setProfile} />;
 
             const NavItem = ({ id, icon: Icon, label }) => (
-                <button onClick={() => { setActiveTab(id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${activeTab === id ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-200 hover:bg-white/10'}`}>
+                <button onClick={() => { setActiveTab(id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded transition-all font-semibold text-sm ${activeTab === id ? 'bg-white text-[#0078d4] border-l-4 border-[#0078d4] shadow-sm' : 'text-[#323130] hover:bg-[#edebe9]'}`}>
                     <Icon size={18} /> <span>{label}</span>
                 </button>
             );
 
             return (
-                <div className="h-screen bg-slate-50 flex overflow-hidden">
-                    {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />}
-                    <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-blue-900 text-white flex flex-col transition-transform duration-300 shadow-2xl ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-                        <div className="p-8 pb-6">
+                <div className="h-screen bg-[#faf9f8] flex overflow-hidden">
+                    {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+                    <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-[#f3f2f1] text-[#323130] border-r border-[#edebe9] flex flex-col transition-transform duration-300 shadow-xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+                        <div className="p-6 pb-4">
                             <div className="flex items-center gap-3 mb-6">
-                                <div className="bg-white/20 p-1 rounded-lg backdrop-blur-sm"><img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" /></div>
-                                <div><h1 className="font-bold text-xl tracking-tight">Varun Dynamics</h1><p className="text-xs text-blue-200 opacity-80">Enterprise System</p></div>
+                                <div className="bg-white p-1 rounded border border-[#edebe9] shadow-sm"><img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" /></div>
+                                <div><h1 className="font-semibold text-lg tracking-tight">Varun Dynamics</h1><p className="text-xs text-[#605e5c]">Enterprise System</p></div>
                             </div>
-                            <div className="bg-white/10 p-3 rounded-xl flex items-center gap-3 border border-white/5">
-                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm overflow-hidden border-2 border-blue-400">
+                            <div className="bg-white p-3 rounded flex items-center gap-3 border border-[#edebe9] shadow-sm">
+                                <div className="w-10 h-10 rounded-full bg-[#f3f2f1] flex items-center justify-center font-semibold text-[#323130] overflow-hidden border border-[#edebe9]">
                                     {profile.photoURL ? <img src={profile.photoURL} className="w-full h-full object-cover"/> : profile.name.charAt(0)}
                                 </div>
-                                <div className="overflow-hidden"><p className="font-bold text-sm truncate">{profile.name}</p><p className="text-xs text-blue-200 truncate">{profile.role}</p></div>
+                                <div className="overflow-hidden"><p className="font-semibold text-sm truncate">{profile.name}</p><p className="text-xs text-[#605e5c] truncate">{profile.role}</p></div>
                             </div>
                         </div>
                         <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar pb-6">
-                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-2">Main</p>
+                            <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-2">Workspace</p>
                             <NavItem id="dashboard" icon={Lucide.LayoutDashboard} label="Dashboard" />
+                            <NavItem id="meetings" icon={Lucide.CalendarClock} label="Meetings" />
                             <NavItem id="notices" icon={Lucide.Megaphone} label="Notice Board" />
+                            <NavItem id="vault" icon={Lucide.FolderLock} label="Document Vault" />
                             
-                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Work</p>
+                            <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Productivity</p>
                             <NavItem id="attendance" icon={Lucide.Clock} label="Attendance" />
                             <NavItem id="tasks" icon={Lucide.CheckSquare} label="Task Board" />
-                            <NavItem id="leaves" icon={Lucide.CalendarDays} label="Leaves" />
+                            <NavItem id="okrs" icon={Lucide.Target} label="Objectives (OKRs)" />
                             <NavItem id="eod" icon={Lucide.FileText} label="Daily Reports" />
+                            <NavItem id="leaves" icon={Lucide.CalendarDays} label="Leaves" />
                             
-                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Connect</p>
+                            <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Collaboration</p>
                             <NavItem id="chat" icon={Lucide.MessageSquare} label="Group Chat" />
                             <NavItem id="ideas" icon={Lucide.Lightbulb} label="Idea Hub" />
+                            <NavItem id="training" icon={Lucide.GraduationCap} label="Learning Hub" />
                             <NavItem id="progress" icon={Lucide.BarChart2} label="My Progress" />
                             
-                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Support</p>
+                            <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Support & Ops</p>
+                            <NavItem id="expenses" icon={Lucide.Receipt} label="Expenses" />
+                            <NavItem id="assets" icon={Lucide.MonitorSmartphone} label="My Assets" />
                             <NavItem id="payroll" icon={Lucide.Wallet} label="Payroll" />
                             <NavItem id="helpdesk" icon={Lucide.LifeBuoy} label="Help Desk" />
                             
+                            {(profile.role === 'Admin' || profile.email === CRM_EMAIL) && (
+                                <>
+                                    <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Sales & Clients</p>
+                                    <NavItem id="crm" icon={Lucide.Briefcase} label="CRM Dashboard" />
+                                </>
+                            )}
+                            
                             {profile.role === 'Admin' && (
                                 <>
-                                    <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Admin</p>
+                                    <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Admin Panel</p>
                                     <NavItem id="users" icon={Lucide.Users} label="User Management" />
                                     <NavItem id="payroll-manager" icon={Lucide.DollarSign} label="Payroll Manager" />
                                 </>
                             )}
                         </nav>
-                        <div className="p-4 bg-blue-950/50"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-200 hover:text-white hover:bg-red-500/20 py-3 rounded-xl text-sm transition-all"><Lucide.LogOut size={16} /> Sign Out</button></div>
+                        <div className="p-4 bg-white border-t border-[#edebe9]"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-[#a4262c] hover:bg-[#fde7e9] py-2 rounded text-sm font-semibold transition-all"><Lucide.LogOut size={16} /> Sign Out</button></div>
                     </aside>
 
                     <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-                        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex items-center justify-between lg:hidden shadow-sm z-30 sticky top-0">
-                            <button onClick={() => setSidebarOpen(true)} className="text-slate-600 p-2"><Lucide.Menu size={24} /></button>
-                            <span className="font-bold text-slate-800">Varun Dynamics</span>
+                        <header className="bg-white border-b border-[#edebe9] p-4 flex items-center justify-between lg:hidden shadow-sm z-30 sticky top-0">
+                            <button onClick={() => setSidebarOpen(true)} className="text-[#323130] p-2 hover:bg-[#f3f2f1] rounded"><Lucide.Menu size={24} /></button>
+                            <span className="font-semibold text-[#323130]">Varun Dynamics</span>
                             <div className="w-8" />
                         </header>
                         <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
@@ -1125,6 +1774,15 @@
                                 {activeTab === 'payroll' && <PayrollModule user={{...profile, uid: user.uid}} />}
                                 {activeTab === 'helpdesk' && <HelpDeskModule user={{...profile, uid: user.uid}} tickets={tickets} onRaiseTicket={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), data)} onUpdateStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tickets', id), {status})} />}
                                 {activeTab === 'notices' && <NoticesModule user={{...profile, uid: user.uid}} announcements={announcements} onPostNotice={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), data)} onDeleteNotice={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'notices', id))} />}
+                                
+                                {/* Advanced Modules */}
+                                {activeTab === 'assets' && <AssetsModule user={{...profile, uid: user.uid}} assets={assets} allUsers={allUsers} onAddAsset={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'assets'), d)} onAssignAsset={(id, d)=>updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'assets', id), d)} onDeleteAsset={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'assets', id))} />}
+                                {activeTab === 'expenses' && <ExpensesModule user={{...profile, uid: user.uid}} expenses={expenses} onSubmitExpense={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'expenses'), d)} onUpdateExpense={(id, d)=>updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'expenses', id), d)} />}
+                                {activeTab === 'okrs' && <OKRModule user={{...profile, uid: user.uid}} okrs={okrs} onSubmitOKR={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'okrs'), d)} onUpdateProgress={(id, progress)=>updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'okrs', id), {progress})} onDeleteOKR={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'okrs', id))} />}
+                                {activeTab === 'vault' && <VaultModule user={{...profile, uid: user.uid}} documents={documents} onAddDocument={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'documents'), d)} onDeleteDocument={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'documents', id))} />}
+                                {activeTab === 'meetings' && <MeetingsModule user={{...profile, uid: user.uid}} meetings={meetings} onScheduleMeeting={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'meetings'), d)} onDeleteMeeting={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'meetings', id))} />}
+                                {activeTab === 'training' && <TrainingModule user={{...profile, uid: user.uid}} trainings={trainings} onAddTraining={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'trainings'), d)} onMarkComplete={(id, completions)=>updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'trainings', id), {completions})} onDeleteTraining={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'trainings', id))} />}
+                                {activeTab === 'crm' && <CRMModule user={{...profile, uid: user.uid}} clients={clients} onAddClient={(d)=>addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'clients'), d)} onUpdateClient={(id, d)=>updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'clients', id), d)} onDeleteClient={(id)=>deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'clients', id))} />}
                             </div>
                         </div>
                     </main>
@@ -1132,7 +1790,7 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
