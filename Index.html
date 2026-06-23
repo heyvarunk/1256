@@ -10,6 +10,19 @@
     
     <!-- Babel for JSX compilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- jsPDF for Payslip Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- Import Map for Babel JSX runtime -->
+    <script type="importmap">
+        {
+            "imports": {
+                "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+            }
+        }
+    </script>
 
     <style>
         /* Essential for Mobile Full Height */
@@ -17,20 +30,21 @@
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Prevent body scroll, handle inside app */
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif;
         }
         
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-track { background: #f8fafc; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        /* Mobile adjustments */
+        
         body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
@@ -63,6 +77,7 @@
 
         const APP_ID = 'varun-dynamics-local';
         const MASTER_ADMIN_EMAIL = 'info@varundynamics.in';
+        const LOGO_URL = "https://raw.githubusercontent.com/heyvarunk/124/main/Copilot_20250716_231520.png";
 
         // --- APP INITIALIZATION ---
         let app, auth, db, isConfigured = false;
@@ -75,6 +90,20 @@
         } catch (e) {
             console.warn("Firebase configuration error:", e);
         }
+
+        // --- HELPER: NOTIFICATIONS ---
+        const requestNotificationPermission = () => {
+            if (!("Notification" in window)) return;
+            if (Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+        };
+
+        const sendNotification = (title, body) => {
+            if (Notification.permission === "granted") {
+                new Notification(title, { body, icon: LOGO_URL });
+            }
+        };
 
         // --- COMPONENTS ---
 
@@ -113,6 +142,8 @@
                     const normalizedEmail = email.toLowerCase().trim();
                     const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
                     const user = userCredential.user;
+
+                    requestNotificationPermission();
 
                     if (normalizedEmail === MASTER_ADMIN_EMAIL) {
                         const adminProfile = {
@@ -153,27 +184,29 @@
             };
 
             return (
-                <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in flex-shrink-0">
-                        <div className="bg-blue-900 p-8 text-center relative">
-                             <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg">
-                                <Lucide.Briefcase className="text-white w-8 h-8" />
+                <div className="min-h-[100vh] bg-slate-900 flex flex-col items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in flex-shrink-0">
+                        <div className="bg-gradient-to-br from-blue-900 to-slate-900 p-8 text-center relative">
+                             <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg border border-white/10 p-2 overflow-hidden">
+                                <img src={LOGO_URL} alt="Varun Dynamics Logo" className="w-full h-full object-contain" />
                             </div>
-                            <h1 className="text-2xl font-bold text-white">Varun Dynamics</h1>
-                            <p className="text-blue-200 text-sm mt-1">ERP Login</p>
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Varun Dynamics</h1>
+                            <p className="text-blue-200 text-sm mt-1 font-medium">Enterprise Resource Portal</p>
                         </div>
                         <form onSubmit={handleLogin} className="p-8 space-y-6">
-                            {error && <div className="bg-red-50 text-red-600 p-3 rounded text-sm flex items-center gap-2"><Lucide.AlertCircle size={16}/> {error}</div>}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Email ID</label>
-                                <input type="email" required className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm flex items-center gap-2 border border-red-100"><Lucide.AlertCircle size={16}/> {error}</div>}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Access ID</label>
+                                    <input type="email" required className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base transition-all" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Secure Password</label>
+                                    <input type="password" required className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base transition-all" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-                                <input type="password" required className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
-                            </div>
-                            <button type="submit" disabled={loading} className="w-full bg-blue-900 hover:bg-blue-800 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2 text-base">
-                                {loading ? 'Verifying...' : 'Secure Login'} <Lucide.ArrowRight size={16} />
+                            <button type="submit" disabled={loading} className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-base shadow-lg shadow-blue-900/20 active:scale-[0.98]">
+                                {loading ? 'Authenticating...' : 'Sign In Securely'} <Lucide.ArrowRight size={18} />
                             </button>
                         </form>
                     </div>
@@ -181,8 +214,386 @@
             );
         };
 
-        // --- MODULES ---
+        // --- DYNAMIC MODULES ---
 
+        const Dashboard = ({ user, attendanceLogs, tasks, leaves, reports, announcements, setActiveTab, onMarkAttendance }) => {
+            const time = new Date().getHours();
+            const greeting = time < 12 ? 'Good Morning' : time < 18 ? 'Good Afternoon' : 'Good Evening';
+            const todayLog = attendanceLogs.find(l => l.userId === user.uid && new Date(l.timestamp?.toDate()).toDateString() === new Date().toDateString());
+            
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <div className="relative overflow-hidden bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-3xl p-8 text-white shadow-xl">
+                        <div className="relative z-10">
+                            <p className="text-blue-200 font-medium mb-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            <h2 className="text-3xl md:text-4xl font-bold mb-2">{greeting}, {user.name.split(' ')[0]}</h2>
+                            <p className="opacity-90 max-w-lg">You have {tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} pending tasks today.</p>
+                        </div>
+                        <div className="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 transform origin-bottom-left"></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Lucide.Clock size={20} /></div>
+                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${todayLog ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{todayLog ? 'Present' : 'Absent'}</span>
+                            </div>
+                            <p className="text-slate-500 text-xs font-bold uppercase">Attendance</p>
+                            <p className="text-xl font-bold text-slate-800">{todayLog ? 'Clocked In' : 'Not Marked'}</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Lucide.CheckSquare size={20} /></div>
+                                <span className="text-xs font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700">{tasks.filter(t=>t.status==='done').length} Done</span>
+                            </div>
+                            <p className="text-slate-500 text-xs font-bold uppercase">My Tasks</p>
+                            <p className="text-xl font-bold text-slate-800">{tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} Pending</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+                        <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Quick Actions</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <button onClick={() => onMarkAttendance(todayLog ? 'OUT' : 'IN')} className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all ${todayLog ? 'bg-red-50 border-red-100 text-red-600 hover:bg-red-100' : 'bg-green-50 border-green-100 text-green-600 hover:bg-green-100'}`}>
+                                {todayLog ? <Lucide.LogOut size={24}/> : <Lucide.LogIn size={24}/>}
+                                <span className="text-xs font-bold">{todayLog ? 'Punch Out' : 'Punch In'}</span>
+                            </button>
+                            <button onClick={()=>setActiveTab('tasks')} className="p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-slate-600 hover:text-blue-600 flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.PlusSquare size={24}/>
+                                <span className="text-xs font-bold">New Task</span>
+                            </button>
+                            <button onClick={()=>setActiveTab('payroll')} className="p-4 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50 text-slate-600 hover:text-green-600 flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.Wallet size={24}/>
+                                <span className="text-xs font-bold">My Payslip</span>
+                            </button>
+                            <button onClick={()=>setActiveTab('helpdesk')} className="p-4 rounded-xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50 text-slate-600 hover:text-purple-600 flex flex-col items-center justify-center gap-2 transition-all">
+                                <Lucide.LifeBuoy size={24}/>
+                                <span className="text-xs font-bold">Support</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ADMIN MODULES ---
+
+        const AdminPayrollManager = ({ users, onUpdateSalary }) => {
+            const [selectedUser, setSelectedUser] = useState(null);
+            const [salary, setSalary] = useState({ basic: 0, hra: 0, da: 0, special: 0, pf: 0, tax: 0 });
+
+            const handleUserSelect = (e) => {
+                const uid = e.target.value;
+                if(!uid) { setSelectedUser(null); return; }
+                const user = users.find(u => u.id === uid);
+                setSelectedUser(user);
+                setSalary(user.salaryConfig || { basic: 0, hra: 0, da: 0, special: 0, pf: 0, tax: 0 });
+            };
+
+            const handleSave = async () => {
+                if(!selectedUser) return;
+                await onUpdateSalary(selectedUser.id, salary);
+                alert("Salary structure updated successfully!");
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-bold text-slate-800">Payroll Management</h2></header>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <div className="mb-6">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">Select Employee</label>
+                            <select className="w-full border p-2 rounded-lg" onChange={handleUserSelect}>
+                                <option value="">-- Choose Employee --</option>
+                                {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                            </select>
+                        </div>
+
+                        {selectedUser && (
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-blue-900 border-b pb-2">Earnings Configuration</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="text-xs text-slate-500">Basic Pay</label><input type="number" className="w-full border p-2 rounded" value={salary.basic} onChange={e=>setSalary({...salary, basic: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-slate-500">HRA</label><input type="number" className="w-full border p-2 rounded" value={salary.hra} onChange={e=>setSalary({...salary, hra: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-slate-500">DA</label><input type="number" className="w-full border p-2 rounded" value={salary.da} onChange={e=>setSalary({...salary, da: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-slate-500">Special Allow.</label><input type="number" className="w-full border p-2 rounded" value={salary.special} onChange={e=>setSalary({...salary, special: parseInt(e.target.value)||0})} /></div>
+                                </div>
+                                <h3 className="font-bold text-red-900 border-b pb-2 mt-4">Deductions</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="text-xs text-slate-500">PF</label><input type="number" className="w-full border p-2 rounded" value={salary.pf} onChange={e=>setSalary({...salary, pf: parseInt(e.target.value)||0})} /></div>
+                                    <div><label className="text-xs text-slate-500">Tax</label><input type="number" className="w-full border p-2 rounded" value={salary.tax} onChange={e=>setSalary({...salary, tax: parseInt(e.target.value)||0})} /></div>
+                                </div>
+                                <button onClick={handleSave} className="w-full bg-blue-900 text-white py-3 rounded-lg font-bold mt-4">Save Configuration</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const PayrollModule = ({ user }) => {
+            const { salaryConfig } = user;
+            
+            const downloadPDF = () => {
+                if(!salaryConfig) return;
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                doc.setFontSize(20);
+                doc.text("Varun Dynamics - Payslip", 105, 20, null, null, "center");
+                doc.setFontSize(12);
+                doc.text(`Employee: ${user.name}`, 20, 40);
+                doc.text(`Role: ${user.role}`, 20, 50);
+                doc.text(`Date: ${new Date().toLocaleDateString()}`, 150, 40);
+
+                const earnings = [
+                    ["Basic Pay", salaryConfig.basic],
+                    ["HRA", salaryConfig.hra],
+                    ["DA", salaryConfig.da],
+                    ["Special Allowance", salaryConfig.special],
+                    ["GROSS EARNINGS", (salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special)]
+                ];
+
+                const deductions = [
+                    ["Provident Fund", salaryConfig.pf],
+                    ["Professional Tax", salaryConfig.tax],
+                    ["TOTAL DEDUCTIONS", (salaryConfig.pf + salaryConfig.tax)]
+                ];
+
+                doc.autoTable({
+                    startY: 60,
+                    head: [['Earnings Head', 'Amount (INR)']],
+                    body: earnings,
+                    theme: 'grid',
+                    headStyles: { fillColor: [22, 160, 133] }
+                });
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 10,
+                    head: [['Deductions Head', 'Amount (INR)']],
+                    body: deductions,
+                    theme: 'grid',
+                    headStyles: { fillColor: [192, 57, 43] }
+                });
+
+                const net = (salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special) - (salaryConfig.pf + salaryConfig.tax);
+                doc.setFontSize(14);
+                doc.text(`NET PAYABLE: INR ${net}`, 20, doc.lastAutoTable.finalY + 20);
+
+                doc.save("payslip.pdf");
+            };
+
+            if (!salaryConfig) {
+                return (
+                    <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-slate-200 mt-8">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><Lucide.Ban size={32}/></div>
+                        <h3 className="text-lg font-bold text-slate-700">Payroll Not Configured</h3>
+                        <p className="text-slate-500 mt-2">Your salary details have not been updated by the Administrator yet.</p>
+                    </div>
+                );
+            }
+
+            const gross = salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special;
+            const deductions = salaryConfig.pf + salaryConfig.tax;
+            const net = gross - deductions;
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-bold text-slate-800">My Payslip</h2></header>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
+                            <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">Total Net Payable</p>
+                            <h3 className="text-4xl font-bold mb-6">₹ {net.toLocaleString()}</h3>
+                            <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
+                                <div><p className="text-slate-400 text-xs">Gross Earnings</p><p className="font-bold text-lg text-green-400">₹ {gross.toLocaleString()}</p></div>
+                                <div><p className="text-slate-400 text-xs">Total Deductions</p><p className="font-bold text-lg text-red-400">₹ {deductions.toLocaleString()}</p></div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Breakdown</h3>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between"><span className="text-slate-500">Basic Pay</span><span className="font-medium">₹ {salaryConfig.basic}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">HRA</span><span className="font-medium">₹ {salaryConfig.hra}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Allowances</span><span className="font-medium">₹ {salaryConfig.da + salaryConfig.special}</span></div>
+                                <div className="flex justify-between text-red-600"><span className="text-slate-500">Deductions (PF/Tax)</span><span className="font-medium">- ₹ {deductions}</span></div>
+                            </div>
+                            <button onClick={downloadPDF} className="w-full mt-6 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                                <Lucide.Download size={16}/> Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AttendanceModule = ({ user, allUsers, attendanceLogs, onMarkAttendance }) => {
+            const today = new Date().toLocaleDateString();
+            
+            // Employee View
+            if (user.role !== 'Admin') {
+                const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate()).toLocaleDateString() === today).sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+                const lastStatus = todaysLogs.length > 0 ? todaysLogs[0].type : 'OUT';
+                return (
+                    <div className="space-y-6 animate-fade-in pb-20">
+                        <header><h2 className="text-2xl font-bold text-slate-800">My Attendance</h2></header>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
+                                <h3 className="text-lg font-medium text-slate-700">{lastStatus === 'IN' ? 'You are Clocked In' : 'You are Clocked Out'}</h3>
+                                <button onClick={() => onMarkAttendance(lastStatus === 'IN' ? 'OUT' : 'IN')} className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-xl border-8 ${lastStatus === 'IN' ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
+                                    <div className={`p-3 rounded-full ${lastStatus === 'IN' ? 'bg-red-200' : 'bg-green-200'}`}>{lastStatus === 'IN' ? <Lucide.LogOut size={24} /> : <Lucide.LogIn size={24} />}</div>
+                                    <span className="font-bold">{lastStatus === 'IN' ? 'PUNCH OUT' : 'PUNCH IN'}</span>
+                                </button>
+                            </div>
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 h-[300px] overflow-auto">
+                                <h3 className="font-semibold text-slate-700 mb-2">Today's Logs</h3>
+                                {todaysLogs.map(log => (
+                                    <div key={log.id} className="flex items-center gap-3 p-2 border-b border-slate-50">
+                                        <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                        <div className="text-sm"><span className="font-bold">{log.type === 'IN' ? 'IN' : 'OUT'}</span> <span className="text-slate-400 text-xs">{new Date(log.timestamp?.toDate()).toLocaleTimeString()}</span></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Admin View
+            return (
+                <div className="space-y-6 animate-fade-in pb-20">
+                    <header><h2 className="text-2xl font-bold text-slate-800">Team Attendance</h2></header>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 uppercase text-xs"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Status Today</th><th className="px-6 py-3">Last Active</th></tr></thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {allUsers.map(u => {
+                                    if(u.id === user.uid) return null; // Skip self in admin view
+                                    const userLogs = attendanceLogs.filter(l => l.userId === u.id && new Date(l.timestamp?.toDate()).toLocaleDateString() === today);
+                                    const isPresent = userLogs.some(l => l.type === 'IN');
+                                    return (
+                                        <tr key={u.id} className="hover:bg-slate-50">
+                                            <td className="px-6 py-4 font-medium">{u.name}</td>
+                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${isPresent ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>{isPresent ? 'Present' : 'Absent'}</span></td>
+                                            <td className="px-6 py-4 text-slate-500">{u.lastActive ? new Date(u.lastActive.toDate()).toLocaleTimeString() : 'N/A'}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const HelpDeskModule = ({ user, tickets, onRaiseTicket, onUpdateStatus }) => {
+            const [subject, setSubject] = useState('');
+            const [category, setCategory] = useState('IT Support');
+            const [desc, setDesc] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!subject) return;
+                onRaiseTicket({ subject, category, description: desc, status: 'Open', userId: user.uid, userName: user.name, timestamp: serverTimestamp() });
+                setSubject(''); setDesc('');
+            };
+
+            const myTickets = user.role === 'Admin' ? tickets : tickets.filter(t => t.userId === user.uid);
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-bold text-slate-800">Help Desk</h2>
+                    </header>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="font-bold text-slate-700 mb-4">Raise New Ticket</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <select className="w-full border p-2 rounded text-base bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                    <option>IT Support</option><option>HR Query</option><option>Facility/Maintenance</option><option>Accounts</option>
+                                </select>
+                                <input type="text" className="w-full border p-2 rounded text-base" placeholder="Subject" value={subject} onChange={e=>setSubject(e.target.value)} required />
+                                <textarea className="w-full border p-2 rounded text-base h-32 resize-none" placeholder="Describe the issue..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-blue-900 text-white py-2 rounded font-medium">Submit Ticket</button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 space-y-4">
+                            {myTickets.map(ticket => (
+                                <div key={ticket.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{ticket.category}</span>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${ticket.status==='Open'?'bg-green-100 text-green-700': ticket.status==='Resolved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{ticket.status}</span>
+                                            </div>
+                                            <h4 className="font-bold text-slate-800">{ticket.subject}</h4>
+                                            <p className="text-sm text-slate-500 mt-1">{ticket.description}</p>
+                                            {user.role === 'Admin' && <p className="text-xs text-blue-600 mt-1 font-bold">Raised by: {ticket.userName}</p>}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-slate-400 mb-2">{new Date(ticket.timestamp?.toDate()).toLocaleDateString()}</p>
+                                            {user.role === 'Admin' && (
+                                                <select 
+                                                    className="text-xs border p-1 rounded bg-slate-50"
+                                                    value={ticket.status}
+                                                    onChange={(e) => onUpdateStatus(ticket.id, e.target.value)}
+                                                >
+                                                    <option value="Open">Open</option>
+                                                    <option value="In Progress">In Progress</option>
+                                                    <option value="Resolved">Resolved</option>
+                                                </select>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {myTickets.length === 0 && <div className="text-center py-10 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">No active tickets.</div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const NoticesModule = ({ user, announcements, onPostNotice, onDeleteNotice }) => {
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+            const [type, setType] = useState('General');
+
+            const handlePost = (e) => {
+                e.preventDefault();
+                onPostNotice({ title, content, type, author: user.name, timestamp: serverTimestamp() });
+                setTitle(''); setContent('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-bold text-slate-800">Notice Board</h2></header>
+                    {user.role === 'Admin' && (
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <form onSubmit={handlePost} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <input type="text" className="col-span-2 border p-2 rounded" placeholder="Notice Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                    <select className="border p-2 rounded" value={type} onChange={e=>setType(e.target.value)}><option>General</option><option>Urgent</option><option>Event</option><option>Holiday</option></select>
+                                </div>
+                                <textarea className="w-full border p-2 rounded h-24" placeholder="Content..." value={content} onChange={e=>setContent(e.target.value)} required></textarea>
+                                <button className="bg-blue-900 text-white px-6 py-2 rounded">Post Notice</button>
+                            </form>
+                        </div>
+                    )}
+                    <div className="space-y-4">
+                        {announcements.map(ann => (
+                            <div key={ann.id} className="bg-white p-4 rounded-lg border border-slate-200 flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-bold">{ann.title} <span className="text-xs bg-slate-100 px-2 rounded ml-2 font-normal">{ann.type}</span></h4>
+                                    <p className="text-sm text-slate-600 mt-1">{ann.content}</p>
+                                </div>
+                                {user.role === 'Admin' && <button onClick={()=>onDeleteNotice(ann.id)} className="text-red-500 text-xs hover:underline">Delete</button>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- PREVIOUS MODULES (Standard) ---
         const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
             const [newName, setNewName] = useState('');
             const [newEmail, setNewEmail] = useState('');
@@ -195,14 +606,7 @@
                 e.preventDefault();
                 if (!newEmail || !newName) return;
                 if (allUsers.some(u => u.email === newEmail)) { alert("User already exists!"); return; }
-                onAddUser({ 
-                    name: newName, 
-                    email: newEmail.toLowerCase().trim(), 
-                    role: newRole, 
-                    location: newLocation, 
-                    photoURL: newPhoto,
-                    createdAt: serverTimestamp() 
-                });
+                onAddUser({ name: newName, email: newEmail.toLowerCase().trim(), role: newRole, location: newLocation, photoURL: newPhoto, createdAt: serverTimestamp() });
                 setNewName(''); setNewEmail(''); setNewPhoto(''); setIsAdding(false);
             };
 
@@ -219,21 +623,9 @@
                             <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <input type="text" required className="w-full px-3 py-2 border rounded-lg text-base" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full Name" />
                                 <input type="email" required className="w-full px-3 py-2 border rounded-lg text-base" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
-                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newRole} onChange={e => setNewRole(e.target.value)}>
-                                    <option value="Employee">Employee</option>
-                                    <option value="Manager">Manager</option>
-                                    <option value="Director">Director</option>
-                                    <option value="Business Partner">Business Partner</option>
-                                </select>
-                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newLocation} onChange={e => setNewLocation(e.target.value)}>
-                                    <option value="Delhi Unit">Delhi Unit</option>
-                                    <option value="Mumbai HQ">Mumbai HQ</option>
-                                    <option value="Bangalore Hub">Bangalore Hub</option>
-                                    <option value="Remote">Remote</option>
-                                </select>
-                                <div className="md:col-span-2">
-                                    <input type="text" className="w-full px-3 py-2 border rounded-lg text-base" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" />
-                                </div>
+                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newRole} onChange={e => setNewRole(e.target.value)}><option>Employee</option><option>Manager</option><option>Director</option><option>Business Partner</option></select>
+                                <select className="w-full px-3 py-2 border rounded-lg bg-white text-base" value={newLocation} onChange={e => setNewLocation(e.target.value)}><option>Delhi Unit</option><option>Mumbai HQ</option><option>Bangalore Hub</option><option>Remote</option></select>
+                                <div className="md:col-span-2"><input type="text" className="w-full px-3 py-2 border rounded-lg text-base" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" /></div>
                                 <button className="md:col-span-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-medium mt-2">Confirm Registration</button>
                             </form>
                         </div>
@@ -241,57 +633,18 @@
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left min-w-[600px]">
-                                <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold">
-                                    <tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr>
-                                </thead>
+                                <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {allUsers.map(user => (
                                         <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                                    {user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-bold text-slate-500">{user.name.charAt(0)}</span>}
-                                                </div>
-                                                <span className="font-medium text-slate-900">{user.name}</span>
-                                            </td>
+                                            <td className="px-6 py-4 flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">{user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-bold text-slate-500">{user.name.charAt(0)}</span>}</div><span className="font-medium text-slate-900">{user.name}</span></td>
                                             <td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-bold border bg-slate-100 text-slate-600 whitespace-nowrap">{user.role}</span></td>
                                             <td className="px-6 py-4 text-slate-500">{user.email}</td>
-                                            <td className="px-6 py-4 text-right">
-                                                {user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-red-500 hover:underline">Remove</button>}
-                                            </td>
+                                            <td className="px-6 py-4 text-right">{user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-red-500 hover:underline">Remove</button>}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const AttendanceModule = ({ user, attendanceLogs, onMarkAttendance }) => {
-            const today = new Date().toLocaleDateString();
-            const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate()).toLocaleDateString() === today).sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
-            const lastStatus = todaysLogs.length > 0 ? todaysLogs[0].type : 'OUT';
-
-            return (
-                <div className="space-y-6 animate-fade-in pb-20">
-                    <header><h2 className="text-2xl font-bold text-slate-800">Attendance</h2></header>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="md:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
-                            <h3 className="text-lg font-medium text-slate-700">{lastStatus === 'IN' ? 'You are Clocked In' : 'You are Clocked Out'}</h3>
-                            <button onClick={() => onMarkAttendance(lastStatus === 'IN' ? 'OUT' : 'IN')} className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-xl border-8 ${lastStatus === 'IN' ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
-                                <div className={`p-3 rounded-full ${lastStatus === 'IN' ? 'bg-red-200' : 'bg-green-200'}`}>{lastStatus === 'IN' ? <Lucide.LogOut size={24} /> : <Lucide.LogIn size={24} />}</div>
-                                <span className="font-bold">{lastStatus === 'IN' ? 'PUNCH OUT' : 'PUNCH IN'}</span>
-                            </button>
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-[300px] overflow-auto">
-                            <h3 className="font-semibold text-slate-700 mb-2">Today's Activity</h3>
-                            {todaysLogs.length === 0 ? <p className="text-slate-400 text-sm">No records today.</p> : todaysLogs.map(log => (
-                                <div key={log.id} className="flex items-center gap-3 p-2 border-b border-slate-50 last:border-0">
-                                    <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                    <div className="text-sm"><span className="font-bold">{log.type === 'IN' ? 'IN' : 'OUT'}</span> <span className="text-slate-400 text-xs">{new Date(log.timestamp?.toDate()).toLocaleTimeString()}</span></div>
-                                </div>
-                            ))}
                         </div>
                     </div>
                 </div>
@@ -309,6 +662,14 @@
                 if (!newTaskTitle.trim()) return;
                 onAddTask({ title: newTaskTitle, assignee: newTaskAssignee || 'Anyone', status: 'todo', createdBy: user.name, createdAt: serverTimestamp() });
                 setNewTaskTitle(''); setNewTaskAssignee(''); setIsAdding(false);
+            };
+
+            const handleStatusChange = (id, status) => {
+                const updateData = { status };
+                if (status === 'done') {
+                    updateData.completedAt = serverTimestamp();
+                }
+                onUpdateTaskStatus(id, updateData);
             };
 
             return (
@@ -331,14 +692,24 @@
                                     <h3 className="font-bold text-slate-700 border-b pb-2">{col.label}</h3>
                                     <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                                         {tasks.filter(t => t.status === col.id).map(task => (
-                                            <div key={task.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group">
+                                            <div key={task.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group hover:shadow-md transition-all">
                                                 <div className="flex justify-between items-start mb-1">
-                                                    <p className="font-medium text-sm">{task.title}</p>
-                                                    <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Lucide.Trash2 size={14}/></button>
+                                                    <p className="font-medium text-sm text-slate-800">{task.title}</p>
+                                                    {(user.role === 'Admin' || task.createdBy === user.name) && (
+                                                        <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={14}/></button>
+                                                    )}
                                                 </div>
                                                 <div className="flex justify-between items-end mt-2">
                                                     <div className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600 flex items-center gap-1"><Lucide.User size={10}/> {task.assignee}</div>
-                                                    {col.id !== 'done' && <button onClick={() => onUpdateTaskStatus(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-xs text-blue-600 hover:underline">Next &rarr;</button>}
+                                                    
+                                                    {col.id !== 'done' && (
+                                                        <button onClick={() => handleStatusChange(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-xs text-blue-600 hover:underline">Next &rarr;</button>
+                                                    )}
+                                                    
+                                                    {/* Admin Override for status */}
+                                                    {user.role === 'Admin' && col.id === 'done' && (
+                                                        <span className="text-xs text-green-600 font-bold flex items-center gap-1"><Lucide.Check size={10}/> Done</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -384,7 +755,7 @@
                                     <thead className="text-xs text-slate-500 uppercase bg-slate-50"><tr><th className="px-4 py-2">Name</th><th className="px-4 py-2">Dates</th><th className="px-4 py-2">Status</th></tr></thead>
                                     <tbody>
                                         {leaves.map((l, i) => (
-                                            <tr key={i} className="border-b"><td className="px-4 py-2">{l.userName}</td><td className="px-4 py-2 text-xs">{l.from} to {l.to}</td><td className="px-4 py-2"><span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">{l.status}</span></td></tr>
+                                            <tr key={i} className="border-b hover:bg-slate-50"><td className="px-4 py-2">{l.userName}</td><td className="px-4 py-2 text-xs">{l.from} to {l.to}</td><td className="px-4 py-2"><span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-200">{l.status}</span></td></tr>
                                         ))}
                                     </tbody>
                                 </table>
@@ -410,14 +781,14 @@
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                             <h3 className="font-semibold mb-4">Submit Report</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <textarea className="w-full border p-3 rounded h-40 resize-none text-base" placeholder="Work done today..." value={content} onChange={e => setContent(e.target.value)} />
+                                <textarea className="w-full border p-3 rounded h-40 resize-none text-base bg-slate-50 focus:bg-white transition-colors" placeholder="Work done today..." value={content} onChange={e => setContent(e.target.value)} />
                                 <button className="w-full bg-blue-900 text-white py-2 rounded text-sm">Submit</button>
                             </form>
                         </div>
                         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-[500px] overflow-auto space-y-4">
                             <h3 className="font-semibold text-slate-800">Team Submissions</h3>
                             {reports.map(r => (
-                                <div key={r.id} className="bg-slate-50 p-4 rounded border border-slate-100">
+                                <div key={r.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                                     <div className="flex justify-between mb-2">
                                         <span className="font-bold text-sm text-blue-900">{r.userName}</span>
                                         <span className="text-xs text-slate-400">{r.date}</span>
@@ -433,6 +804,8 @@
 
         const ChatModule = ({ user, messages, onSendMessage }) => {
             const [text, setText] = useState('');
+            const [isUploading, setIsUploading] = useState(false);
+            const fileInputRef = useRef(null);
             const bottomRef = useRef(null);
             
             useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -440,33 +813,144 @@
             const handleSend = (e) => {
                 e.preventDefault();
                 if(!text.trim()) return;
-                onSendMessage({ text, userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
+                onSendMessage({ text, type: 'text', userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
                 setText('');
             };
 
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (file.type !== 'application/pdf') { alert('Only PDF files are allowed.'); return; }
+                if (file.size > 500 * 1024) { alert('File too large! Please upload PDFs smaller than 500KB.'); return; }
+                setIsUploading(true);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    onSendMessage({ text: 'Shared a PDF file', type: 'pdf', fileName: file.name, fileData: reader.result, userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
+                    setIsUploading(false); e.target.value = null;
+                };
+                reader.readAsDataURL(file);
+            };
+
             return (
-                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-                    <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-700 flex items-center gap-2">
-                        <Lucide.MessageSquare size={18}/> Group Chat
+                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+                    <div className="p-4 bg-white border-b border-slate-100 font-bold text-slate-700 flex items-center gap-2">
+                        <Lucide.MessageSquare size={18} className="text-blue-600"/> Group Chat
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
                         {messages.map(m => (
                             <div key={m.id} className={`flex gap-2 ${m.userId === user.uid ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden shadow-sm">
                                      {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">{m.userName.charAt(0)}</div>}
                                 </div>
-                                <div className={`max-w-[70%] p-3 rounded-lg text-sm ${m.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
+                                <div className={`max-w-[75%] p-3 rounded-2xl text-sm shadow-sm ${m.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>
                                     <p className="font-bold text-xs opacity-70 mb-1">{m.userName}</p>
-                                    <p>{m.text}</p>
+                                    {m.type === 'pdf' ? (
+                                        <div className="flex items-center gap-2 bg-black/10 p-2 rounded-lg">
+                                            <Lucide.FileText size={24} className="flex-shrink-0" />
+                                            <div className="overflow-hidden">
+                                                <p className="truncate font-medium">{m.fileName}</p>
+                                                <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-bold mt-1 inline-block">Download PDF</a>
+                                            </div>
+                                        </div>
+                                    ) : (<p>{m.text}</p>)}
                                 </div>
                             </div>
                         ))}
                         <div ref={bottomRef} />
                     </div>
-                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-slate-200 bg-white flex gap-2">
-                        <input type="text" className="flex-1 border border-slate-300 rounded-full px-4 py-2 text-base md:text-sm focus:outline-none focus:border-blue-500" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
-                        <button className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 flex-shrink-0"><Lucide.Send size={18}/></button>
+                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-slate-100 bg-white flex gap-2 items-center">
+                        <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                        <button type="button" onClick={() => fileInputRef.current.click()} className="text-slate-400 hover:text-blue-600 p-2 rounded-full transition-colors bg-slate-50" disabled={isUploading}>
+                            {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
+                        </button>
+                        <input type="text" className="flex-1 bg-slate-50 border-0 rounded-full px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-blue-100" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
+                        <button className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 flex-shrink-0 shadow-md shadow-blue-200"><Lucide.Send size={18}/></button>
                     </form>
+                </div>
+            );
+        };
+
+        const ProgressModule = ({ user, tasks, attendanceLogs, reports }) => {
+            const myTasks = tasks.filter(t => t.assignee === user.name);
+            const completed = myTasks.filter(t => t.status === 'done').length;
+            const total = myTasks.length;
+            const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+            const presentDays = attendanceLogs.filter(l => l.userId === user.uid && l.type === 'IN').length;
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-bold text-slate-800">My Progress</h2></header>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-full -mr-8 -mt-8"></div>
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2 relative z-10">Task Efficiency</h3>
+                            <div className="flex items-end gap-2 mb-2 relative z-10">
+                                <span className="text-4xl font-bold text-blue-600">{progress}%</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 relative z-10">
+                                <div className="bg-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${progress}%`}}></div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Attendance Streak</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-green-100 text-green-600 rounded-xl"><Lucide.CalendarCheck size={24} /></div>
+                                <div><span className="text-2xl font-bold text-slate-800">{presentDays}</span><p className="text-xs text-slate-500">Days Present</p></div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h3 className="text-slate-500 text-xs font-bold uppercase mb-2">Reports Submitted</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><Lucide.FileText size={24} /></div>
+                                <div><span className="text-2xl font-bold text-slate-800">{reports.filter(r => r.userId === user.uid).length}</span><p className="text-xs text-slate-500">EODs Filed</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const IdeaHubModule = ({ user, ideas, onSubmitIdea }) => {
+            const [title, setTitle] = useState('');
+            const [desc, setDesc] = useState('');
+            const [category, setCategory] = useState('Process Improvement');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!title || !desc) return;
+                onSubmitIdea({ title, description: desc, category, userId: user.uid, userName: user.name, votes: 0, timestamp: serverTimestamp() });
+                setTitle(''); setDesc('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-bold text-slate-800">Idea Hub</h2>
+                        <p className="text-slate-500">Work Process Idea Center</p>
+                    </header>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Lucide.Lightbulb size={18} className="text-yellow-500"/> Submit Idea</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <input type="text" className="w-full border p-2 rounded text-base" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                <select className="w-full border p-2 rounded text-base bg-white" value={category} onChange={e=>setCategory(e.target.value)}>
+                                    <option>Process Improvement</option><option>Cost Saving</option><option>Culture</option><option>Safety</option>
+                                </select>
+                                <textarea className="w-full border p-2 rounded text-base h-32 resize-none" placeholder="Description..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-blue-900 text-white py-2 rounded font-medium">Submit</button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 space-y-4">
+                            {ideas.map(idea => (
+                                <div key={idea.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                                    <div className="flex justify-between items-start mb-2"><span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-bold">{idea.category}</span><span className="text-xs text-slate-400">{idea.userName}</span></div>
+                                    <h4 className="font-bold text-slate-800 text-lg mb-1">{idea.title}</h4>
+                                    <p className="text-slate-600 text-sm">{idea.description}</p>
+                                </div>
+                            ))}
+                            {ideas.length === 0 && <div className="text-center py-10 text-slate-400">No ideas yet. Share yours!</div>}
+                        </div>
+                    </div>
                 </div>
             );
         };
@@ -487,27 +971,79 @@
             const [reports, setReports] = useState([]);
             const [allUsers, setAllUsers] = useState([]);
             const [messages, setMessages] = useState([]);
+            const [ideas, setIdeas] = useState([]);
+            const [announcements, setAnnouncements] = useState([]);
+            const [tickets, setTickets] = useState([]);
 
+            // Persistent Login
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, async (u) => {
-                    if (u) { setUser(u); } else { setUser(null); setProfile(null); }
+                    if (u) { 
+                        setUser(u);
+                        try {
+                            const q = query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), where("uid", "==", u.uid));
+                            const snapshot = await getDocs(q);
+                            if (!snapshot.empty) {
+                                setProfile({ ...snapshot.docs[0].data(), docId: snapshot.docs[0].id });
+                            }
+                        } catch (e) { console.error("Profile fetch error", e); }
+                    } else { setUser(null); setProfile(null); }
                     setLoading(false);
                 });
                 return () => unsubscribe();
             }, []);
 
+            // Data Sync & Logic
             useEffect(() => {
                 if (!user || !profile) return;
+                
                 const unsub1 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), s => setAttendanceLogs(s.docs.map(d => ({id: d.id, ...d.data()}))));
-                const unsub2 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), s => setTasks(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                
+                // Tasks Listener & Auto-Delete Logic
+                const unsub2 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), s => {
+                    const taskList = s.docs.map(d => ({id: d.id, ...d.data()}));
+                    setTasks(taskList);
+                    
+                    // Auto-delete completed tasks older than 24 hours (Only Admin triggers this to save writes)
+                    if (profile.role === 'Admin') {
+                        const now = Date.now();
+                        taskList.forEach(task => {
+                            if (task.status === 'done' && task.completedAt) {
+                                const completedTime = task.completedAt.toDate().getTime();
+                                if (now - completedTime > 24 * 60 * 60 * 1000) { // 24 hours
+                                    deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', task.id));
+                                }
+                            }
+                        });
+                    }
+                });
+
                 const unsub3 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), s => setLeaves(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub4 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), orderBy('timestamp', 'desc')), s => setReports(s.docs.map(d => ({id: d.id, ...d.data()}))));
-                const unsub5 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), orderBy('timestamp', 'asc')), s => setMessages(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub5 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), orderBy('timestamp', 'asc')), s => {
+                    const newMessages = s.docs.map(d => ({id: d.id, ...d.data()}));
+                    setMessages(newMessages);
+                    if (!s.empty) {
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        const now = new Date();
+                        const msgTime = lastMsg.timestamp?.toDate ? lastMsg.timestamp.toDate() : new Date();
+                        if (lastMsg.userId !== user.uid && (now - msgTime) < 10000 && s.docChanges().some(c => c.type === 'added' && c.doc.id === lastMsg.id)) {
+                            sendNotification(`New Message from ${lastMsg.userName}`, lastMsg.type === 'pdf' ? 'Shared a PDF File' : lastMsg.text);
+                        }
+                    }
+                });
+                const unsub7 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), orderBy('timestamp', 'desc')), s => setIdeas(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub8 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), orderBy('timestamp', 'desc')), s => setAnnouncements(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsub9 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), orderBy('timestamp', 'desc')), s => setTickets(s.docs.map(d => ({id: d.id, ...d.data()}))));
+
                 let unsub6 = () => {};
                 if (profile.role === 'Admin') {
                     unsub6 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), s => setAllUsers(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                } else {
+                    setAllUsers([]);
                 }
-                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+                
+                return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); };
             }, [user, profile]);
 
             const handleLogout = async () => { await signOut(auth); setProfile(null); };
@@ -516,58 +1052,79 @@
             if (!user || !profile) return <LoginScreen onJoin={setProfile} />;
 
             const NavItem = ({ id, icon: Icon, label }) => (
-                <button onClick={() => { setActiveTab(id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === id ? 'bg-blue-800 text-white' : 'text-blue-100 hover:bg-blue-900'}`}>
-                    <Icon size={18} /> <span className="font-medium text-sm">{label}</span>
+                <button onClick={() => { setActiveTab(id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${activeTab === id ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-200 hover:bg-white/10'}`}>
+                    <Icon size={18} /> <span>{label}</span>
                 </button>
             );
 
             return (
-                <div className="h-screen bg-slate-100 flex overflow-hidden">
-                    {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />}
-                    <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-blue-950 text-white flex flex-col transition-transform duration-300 shadow-2xl ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-                        <div className="p-6 border-b border-blue-900">
-                            <h1 className="font-bold text-lg">Varun Dynamics</h1>
-                            <div className="mt-4 flex items-center gap-3 bg-blue-900/50 p-2 rounded border border-blue-800">
-                                <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center font-bold text-xs overflow-hidden">
+                <div className="h-screen bg-slate-50 flex overflow-hidden">
+                    {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />}
+                    <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-blue-900 text-white flex flex-col transition-transform duration-300 shadow-2xl ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+                        <div className="p-8 pb-6">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="bg-white/20 p-1 rounded-lg backdrop-blur-sm"><img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" /></div>
+                                <div><h1 className="font-bold text-xl tracking-tight">Varun Dynamics</h1><p className="text-xs text-blue-200 opacity-80">Enterprise System</p></div>
+                            </div>
+                            <div className="bg-white/10 p-3 rounded-xl flex items-center gap-3 border border-white/5">
+                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm overflow-hidden border-2 border-blue-400">
                                     {profile.photoURL ? <img src={profile.photoURL} className="w-full h-full object-cover"/> : profile.name.charAt(0)}
                                 </div>
-                                <div><p className="font-bold text-sm truncate w-24">{profile.name}</p><p className="text-xs text-blue-300">{profile.role}</p></div>
+                                <div className="overflow-hidden"><p className="font-bold text-sm truncate">{profile.name}</p><p className="text-xs text-blue-200 truncate">{profile.role}</p></div>
                             </div>
                         </div>
-                        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+                        <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar pb-6">
+                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-2">Main</p>
                             <NavItem id="dashboard" icon={Lucide.LayoutDashboard} label="Dashboard" />
+                            <NavItem id="notices" icon={Lucide.Megaphone} label="Notice Board" />
+                            
+                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Work</p>
                             <NavItem id="attendance" icon={Lucide.Clock} label="Attendance" />
                             <NavItem id="tasks" icon={Lucide.CheckSquare} label="Task Board" />
-                            <NavItem id="eod" icon={Lucide.FileText} label="Daily Reports" />
                             <NavItem id="leaves" icon={Lucide.CalendarDays} label="Leaves" />
+                            <NavItem id="eod" icon={Lucide.FileText} label="Daily Reports" />
+                            
+                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Connect</p>
                             <NavItem id="chat" icon={Lucide.MessageSquare} label="Group Chat" />
-                            {profile.role === 'Admin' && <NavItem id="users" icon={Lucide.Users} label="User Management" />}
+                            <NavItem id="ideas" icon={Lucide.Lightbulb} label="Idea Hub" />
+                            <NavItem id="progress" icon={Lucide.BarChart2} label="My Progress" />
+                            
+                            <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Support</p>
+                            <NavItem id="payroll" icon={Lucide.Wallet} label="Payroll" />
+                            <NavItem id="helpdesk" icon={Lucide.LifeBuoy} label="Help Desk" />
+                            
+                            {profile.role === 'Admin' && (
+                                <>
+                                    <p className="px-4 text-xs font-bold text-blue-300 uppercase tracking-wider mb-2 mt-6">Admin</p>
+                                    <NavItem id="users" icon={Lucide.Users} label="User Management" />
+                                    <NavItem id="payroll-manager" icon={Lucide.DollarSign} label="Payroll Manager" />
+                                </>
+                            )}
                         </nav>
-                        <div className="p-4 border-t border-blue-900"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-red-600 transition-colors py-2 rounded-lg text-sm"><Lucide.LogOut size={16} /> Sign Out</button></div>
+                        <div className="p-4 bg-blue-950/50"><button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-200 hover:text-white hover:bg-red-500/20 py-3 rounded-xl text-sm transition-all"><Lucide.LogOut size={16} /> Sign Out</button></div>
                     </aside>
 
-                    <main className="flex-1 flex flex-col h-screen overflow-hidden">
-                        <header className="bg-white border-b border-slate-200 p-4 flex items-center justify-between lg:hidden shadow-sm z-30 relative">
+                    <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+                        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex items-center justify-between lg:hidden shadow-sm z-30 sticky top-0">
                             <button onClick={() => setSidebarOpen(true)} className="text-slate-600 p-2"><Lucide.Menu size={24} /></button>
                             <span className="font-bold text-slate-800">Varun Dynamics</span>
                             <div className="w-8" />
                         </header>
-                        <div className="flex-1 overflow-auto bg-slate-50 p-4 lg:p-8">
+                        <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
                             <div className="max-w-6xl mx-auto h-full">
-                                {activeTab === 'dashboard' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
-                                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p className="text-slate-500 text-xs font-bold uppercase">Attendance</p><p className="text-2xl font-bold text-slate-800">{attendanceLogs.some(l => l.userId === user.uid && new Date(l.timestamp?.toDate()).toDateString() === new Date().toDateString()) ? 'Present' : 'Absent'}</p></div>
-                                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p className="text-slate-500 text-xs font-bold uppercase">Pending Tasks</p><p className="text-2xl font-bold text-slate-800">{tasks.filter(t => t.status !== 'done').length}</p></div>
-                                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p className="text-slate-500 text-xs font-bold uppercase">Reports Today</p><p className="text-2xl font-bold text-slate-800">{reports.length}</p></div>
-                                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p className="text-slate-500 text-xs font-bold uppercase">On Leave</p><p className="text-2xl font-bold text-slate-800">{leaves.length}</p></div>
-                                    </div>
-                                )}
+                                {activeTab === 'dashboard' && <Dashboard user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} tasks={tasks} leaves={leaves} reports={reports} announcements={announcements} setActiveTab={setActiveTab} onMarkAttendance={(type) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), { userId: user.uid, userName: profile.name, location: profile.location, type, timestamp: serverTimestamp() })} />}
                                 {activeTab === 'users' && profile.role === 'Admin' && <AdminUserManagement allUsers={allUsers} onAddUser={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), data)} onDeleteUser={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', id))} />}
-                                {activeTab === 'attendance' && <AttendanceModule user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} onMarkAttendance={(type) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), { userId: user.uid, userName: profile.name, location: profile.location, type, timestamp: serverTimestamp() })} />}
-                                {activeTab === 'tasks' && <TaskBoard user={{...profile, uid: user.uid}} tasks={tasks} onAddTask={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), data)} onUpdateTaskStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id), {status})} onDeleteTask={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id))} />}
+                                {activeTab === 'payroll-manager' && profile.role === 'Admin' && <AdminPayrollManager users={allUsers} onUpdateSalary={(uid, salaryConfig) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', uid), { salaryConfig })} />}
+                                {activeTab === 'attendance' && <AttendanceModule user={{...profile, uid: user.uid}} allUsers={allUsers} attendanceLogs={attendanceLogs} onMarkAttendance={(type) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), { userId: user.uid, userName: profile.name, location: profile.location, type, timestamp: serverTimestamp() })} />}
+                                {activeTab === 'tasks' && <TaskBoard user={{...profile, uid: user.uid}} tasks={tasks} onAddTask={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), data)} onUpdateTaskStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id), status)} onDeleteTask={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id))} />}
                                 {activeTab === 'leaves' && <AvailabilityModule user={{...profile, uid: user.uid}} leaves={leaves} onAddLeave={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), data)} />}
                                 {activeTab === 'eod' && <EODModule user={{...profile, uid: user.uid}} reports={reports} onSubmitReport={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), data)} />}
                                 {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} messages={messages} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
+                                {activeTab === 'progress' && <ProgressModule user={{...profile, uid: user.uid}} tasks={tasks} attendanceLogs={attendanceLogs} reports={reports} />}
+                                {activeTab === 'ideas' && <IdeaHubModule user={{...profile, uid: user.uid}} ideas={ideas} onSubmitIdea={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), data)} />}
+                                {activeTab === 'payroll' && <PayrollModule user={{...profile, uid: user.uid}} />}
+                                {activeTab === 'helpdesk' && <HelpDeskModule user={{...profile, uid: user.uid}} tickets={tickets} onRaiseTicket={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), data)} onUpdateStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tickets', id), {status})} />}
+                                {activeTab === 'notices' && <NoticesModule user={{...profile, uid: user.uid}} announcements={announcements} onPostNotice={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), data)} onDeleteNotice={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'notices', id))} />}
                             </div>
                         </div>
                     </main>
@@ -579,4 +1136,4 @@
         root.render(<App />);
     </script>
 </body>
-</html>  
+</html>
