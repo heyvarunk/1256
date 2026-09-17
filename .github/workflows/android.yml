@@ -67,7 +67,7 @@ jobs:
                 myWebView.setWebViewClient(new WebViewClient());
                 
                 // CHANGE THIS URL TO YOUR DEPLOYED SITE:
-                myWebView.loadUrl("https://your-deployed-website.com");
+                myWebView.loadUrl("https://heyvarunk.github.io/1256/");
             }
             @Override
             public void onBackPressed() {
