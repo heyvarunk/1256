@@ -1,0 +1,110 @@
+name: Build Android WebView APK
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Generate Lightweight Android Project
+      run: |
+        mkdir -p app/src/main/java/com/example/myapp
+        mkdir -p app/src/main/res/layout
+        
+        # 1. Create Manifest Permissions
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <manifest xmlns:android="http://android.com" package="com.example.myapp">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <application android:label="My Web App" android:theme="@style/Theme.AppCompat.NoActionBar">
+                <activity android:name=".MainActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        # 2. Create Layout View
+        cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+        <RelativeLayout xmlns:android="http://serif.com" android:layout_width="match_parent" android:layout_height="match_parent">
+            <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" />
+        </RelativeLayout>
+        EOF
+
+        # 3. Create Main Java Logic File (REPLACE THE URL BELOW WITH YOUR WEBSITE)
+        cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.java
+        package com.example.myapp;
+        import android.os.Bundle;
+        import android.webkit.WebSettings;
+        import android.webkit.WebView;
+        import android.webkit.WebViewClient;
+        import androidx.appcompat.app.AppCompatActivity;
+
+        public class MainActivity extends AppCompatActivity {
+            private WebView myWebView;
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                setContentView(R.layout.activity_main);
+                myWebView = (WebView) findViewById(R.id.webview);
+                WebSettings webSettings = myWebView.getSettings();
+                webSettings.setJavaScriptEnabled(true);
+                webSettings.setDomStorageEnabled(true);
+                myWebView.setWebViewClient(new WebViewClient());
+                
+                // CHANGE THIS URL TO YOUR DEPLOYED SITE:
+                myWebView.loadUrl("https://your-deployed-website.com");
+            }
+            @Override
+            public void onBackPressed() {
+                if (myWebView.canGoBack()) { myWebView.goBack(); } else { super.onBackPressed(); }
+            }
+        }
+        EOF
+
+        # 4. Create Basic Gradle Settings
+        echo "include ':app'" > settings.gradle
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories { google() \n mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:8.1.1' }
+        }
+        allprojects { repositories { google() \n mavenCentral() } }
+        EOF
+        
+        cat << 'EOF' > app/build.gradle
+        plugins { id 'com.android.application' }
+        android {
+            namespace 'com.example.myapp'
+            compileSdk 34
+            defaultConfig { applicationId "com.example.myapp"; minSdk 24; targetSdk 34; versionCode 1; versionName "1.0" }
+        }
+        dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+        }
+        EOF
+        
+        chmod +x gradlew || true
+
+    - name: Build Android Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload Downloadable APK File
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-app-apk
+        path: app/build/outputs/apk/debug/app-debug.apk
