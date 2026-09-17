@@ -18,17 +18,27 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Generate Lightweight Android Project
+    # Isolated clean Gradle build pipeline container configuration
+    - name: Setup Gradle Runtime environment
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: 8.5
+
+    - name: Generate Clean Android Architecture Files
       run: |
         mkdir -p app/src/main/java/com/example/myapp
         mkdir -p app/src/main/res/layout
         
-        # 1. Create Manifest Permissions
+        # 1. Create Manifest Permissions (Strict Android 14+ standalone syntax rules)
         cat << 'EOF' > app/src/main/AndroidManifest.xml
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.myapp">
+        <manifest xmlns:android="http://android.com">
             <uses-permission android:name="android.permission.INTERNET" />
-            <application android:label="My Web App" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-                <activity android:name=".MainActivity" android:exported="true">
+            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+            <application 
+                android:label="Varun ERP" 
+                android:hardwareAccelerated="true"
+                android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                <activity android:name="com.example.myapp.MainActivity" android:exported="true" android:configChanges="orientation|screenSize">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
@@ -38,20 +48,21 @@ jobs:
         </manifest>
         EOF
 
-        # 2. Create Layout View
+        # 2. Create Layout View Frame
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
-        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
+        <RelativeLayout xmlns:android="http://android.com" android:layout_width="match_parent" android:layout_height="match_parent">
             <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" />
         </RelativeLayout>
         EOF
 
-        # 3. Create Main Java Logic File using standard Activity
+        # 3. Create Main Java Logic File pointing to your deployed site URL
         cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.java
         package com.example.myapp;
         import android.os.Bundle;
         import android.webkit.WebSettings;
         import android.webkit.WebView;
         import android.webkit.WebViewClient;
+        import android.webkit.WebChromeClient;
         import android.app.Activity;
 
         public class MainActivity extends Activity {
@@ -61,13 +72,23 @@ jobs:
                 super.onCreate(savedInstanceState);
                 setContentView(R.layout.activity_main);
                 myWebView = (WebView) findViewById(R.id.webview);
-                WebSettings webSettings = myWebView.getSettings();
-                webSettings.setJavaScriptEnabled(true);
-                webSettings.setDomStorageEnabled(true);
-                myWebView.setWebViewClient(new WebViewClient());
                 
-                // CHANGE THIS URL TO YOUR DEPLOYED SITE:
-                myWebView.loadUrl("https://heyvarunk.github.io/1256/");
+                WebSettings settings = myWebView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setAllowFileAccess(true);
+                settings.setLoadsImagesAutomatically(true);
+                settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+                
+                settings.setUseWideViewPort(true);
+                settings.setLoadWithOverviewMode(true);
+                
+                myWebView.setWebViewClient(new WebViewClient());
+                myWebView.setWebChromeClient(new WebChromeClient());
+                
+                // Embedded Deployed Application Public Link
+                myWebView.loadUrl("https://github.io");
             }
             @Override
             public void onBackPressed() {
@@ -76,18 +97,46 @@ jobs:
         }
         EOF
 
-        # 4. Create Basic Gradle Settings
+        # 4. Create Standard Build Gradle Settings assets
         echo "include ':app'" > settings.gradle
         
-        printf "buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath 'com.android.tools.build:gradle:8.1.1'\n    }\n}\nallprojects {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n" > build.gradle
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.2.2'
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        EOF
         
-        printf "plugins {\n    id 'com.android.application'\n}\nandroid {\n    namespace 'com.example.myapp'\n    compileSdk 34\n    defaultConfig {\n        applicationId 'com.example.myapp'\n        minSdk 24\n        targetSdk 34\n        versionCode 1\n        versionName '1.0'\n    }\n}\n" > app/build.gradle
-
-    - name: Setup Gradle Wrapper Environment
-      run: gradle wrapper --gradle-version 8.1.1
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+        }
+        android {
+            namespace 'com.example.myapp'
+            compileSdk 34
+            defaultConfig {
+                applicationId 'com.example.myapp'
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName '1.0'
+            }
+        }
+        EOF
 
     - name: Build Android Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+      run: gradle assembleDebug --stacktrace
 
     - name: Upload Downloadable APK File
       uses: actions/upload-artifact@v4
