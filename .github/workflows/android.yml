@@ -18,7 +18,7 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # Isolated clean Gradle build pipeline container configuration
+    # Isolated Gradle runtime environment setup
     - name: Setup Gradle Runtime environment
       uses: gradle/actions/setup-gradle@v4
       with:
@@ -29,9 +29,9 @@ jobs:
         mkdir -p app/src/main/java/com/example/myapp
         mkdir -p app/src/main/res/layout
         
-        # 1. Create Manifest Permissions (Strict Android 14+ standalone syntax rules)
+        # 1. Create Manifest Permissions (Strict Android 14+ schema compliant syntax)
         cat << 'EOF' > app/src/main/AndroidManifest.xml
-        <manifest xmlns:android="http://android.com">
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <application 
@@ -48,14 +48,14 @@ jobs:
         </manifest>
         EOF
 
-        # 2. Create Layout View Frame
+        # 2. Create Layout View Structure with exact Android XML schema declaration
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
-        <RelativeLayout xmlns:android="http://android.com" android:layout_width="match_parent" android:layout_height="match_parent">
+        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
             <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" />
         </RelativeLayout>
         EOF
 
-        # 3. Create Main Java Logic File pointing to your deployed site URL
+        # 3. Create Main Java Logic File pointing to your deployed site
         cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.java
         package com.example.myapp;
         import android.os.Bundle;
@@ -87,7 +87,7 @@ jobs:
                 myWebView.setWebViewClient(new WebViewClient());
                 myWebView.setWebChromeClient(new WebChromeClient());
                 
-                // Embedded Deployed Application Public Link
+                // Mount Live Website URL
                 myWebView.loadUrl("https://github.io");
             }
             @Override
@@ -97,7 +97,7 @@ jobs:
         }
         EOF
 
-        # 4. Create Standard Build Gradle Settings assets
+        # 4. Create Standard Build Gradle Settings files
         echo "include ':app'" > settings.gradle
         
         cat << 'EOF' > build.gradle
