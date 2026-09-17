@@ -40,12 +40,12 @@ jobs:
 
         # 2. Create Layout View
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
-        <RelativeLayout xmlns:android="http://serif.com" android:layout_width="match_parent" android:layout_height="match_parent">
+        <RelativeLayout xmlns:android="http://android.com" android:layout_width="match_parent" android:layout_height="match_parent">
             <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" />
         </RelativeLayout>
         EOF
 
-        # 3. Create Main Java Logic File (REPLACE THE URL BELOW WITH YOUR WEBSITE)
+        # 3. Create Main Java Logic File
         cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.java
         package com.example.myapp;
         import android.os.Bundle;
@@ -78,30 +78,16 @@ jobs:
 
         # 4. Create Basic Gradle Settings
         echo "include ':app'" > settings.gradle
-        cat << 'EOF' > build.gradle
-        buildscript {
-            repositories { google() \n mavenCentral() }
-            dependencies { classpath 'com.android.tools.build:gradle:8.1.1' }
-        }
-        allprojects { repositories { google() \n mavenCentral() } }
-        EOF
         
-        cat << 'EOF' > app/build.gradle
-        plugins { id 'com.android.application' }
-        android {
-            namespace 'com.example.myapp'
-            compileSdk 34
-            defaultConfig { applicationId "com.example.myapp"; minSdk 24; targetSdk 34; versionCode 1; versionName "1.0" }
-        }
-        dependencies {
-            implementation 'androidx.appcompat:appcompat:1.6.1'
-        }
-        EOF
+        printf "buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath 'com.android.tools.build:gradle:8.1.1'\n    }\n}\nallprojects {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n" > build.gradle
         
-        chmod +x gradlew || true
+        printf "plugins {\n    id 'com.android.application'\n}\nandroid {\n    namespace 'com.example.myapp'\n    compileSdk 34\n    defaultConfig {\n        applicationId 'com.example.myapp'\n        minSdk 24\n        targetSdk 34\n        versionCode 1\n        versionName '1.0'\n    }\n}\ndependencies {\n    implementation 'androidx.appcompat:appcompat:1.6.1'\n}\n" > app/build.gradle
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
 
     - name: Build Android Debug APK
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload Downloadable APK File
       uses: actions/upload-artifact@v4
