@@ -98,7 +98,6 @@
             appId: "1:67016520294:web:fd1299acabd1a7a6cf73a7",
             measurementId: "G-64DE9YNTWC"
         };
-        // ------------------------------------------------------------------
 
         const APP_ID = 'varun-dynamics-local';
         const MASTER_ADMIN_EMAIL = 'info@varundynamics.in';
@@ -169,13 +168,7 @@
 
                     if (normalizedEmail === MASTER_ADMIN_EMAIL) {
                         const adminProfile = {
-                            name: 'Master Admin',
-                            email: normalizedEmail,
-                            role: 'Admin',
-                            location: 'Headquarters',
-                            photoURL: '', 
-                            uid: user.uid,
-                            lastActive: serverTimestamp()
+                            name: 'Master Admin', email: normalizedEmail, role: 'Admin', location: 'Headquarters', photoURL: '', uid: user.uid, lastActive: serverTimestamp()
                         };
                         await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', 'admin_master'), adminProfile, { merge: true });
                         onJoin(adminProfile);
@@ -192,8 +185,7 @@
 
                     const userDoc = querySnapshot.docs[0];
                     await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userDoc.id), {
-                        lastActive: serverTimestamp(),
-                        uid: user.uid
+                        lastActive: serverTimestamp(), uid: user.uid
                     });
                     onJoin({ ...userDoc.data(), uid: user.uid, docId: userDoc.id });
 
@@ -220,11 +212,11 @@
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-1.5">Email Access ID</label>
-                                    <input type="email" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
+                                    <input type="email" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="name@varundynamics.in" value={email} onChange={(e) => setEmail(e.target.value)} />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-1.5">Secure Password</label>
-                                    <input type="password" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] focus:border-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                    <input type="password" required className="w-full px-4 py-2.5 border border-[#8a8886] rounded focus:ring-2 focus:ring-[#0078d4] outline-none text-base transition-all bg-white text-[#323130]" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
                                 </div>
                             </div>
                             <button type="submit" disabled={loading} className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white font-semibold py-3 rounded transition-all flex items-center justify-center gap-2 text-base shadow-sm active:scale-[0.98]">
@@ -240,9 +232,14 @@
             const time = new Date().getHours();
             const greeting = time < 12 ? 'Good Morning' : time < 18 ? 'Good Afternoon' : 'Good Evening';
             
-            const todaysLogs = attendanceLogs.filter(l => l.userId === user.uid && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toDateString() === new Date().toDateString())
-                .sort((a, b) => (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()) - (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()));
-            const isClockedIn = todaysLogs.length > 0 && todaysLogs[0].type === 'IN';
+            // Fixed Attendance Logic for Dashboard
+            const todayStr = new Date().toDateString();
+            const todaysLogs = attendanceLogs.filter(l => l.userId === user.uid && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toDateString() === todayStr);
+            const punchInLog = todaysLogs.find(l => l.type === 'IN');
+            const punchOutLog = todaysLogs.find(l => l.type === 'OUT');
+            const hasPunchedIn = !!punchInLog;
+            const hasPunchedOut = !!punchOutLog;
+            const isClockedIn = hasPunchedIn && !hasPunchedOut;
             
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
@@ -255,15 +252,17 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all cursor-pointer" onClick={() => setActiveTab('attendance')}>
                             <div className="flex justify-between items-start mb-2">
                                 <div className="p-2 bg-[#f3f2f1] text-[#0078d4] rounded"><Lucide.Clock size={20} /></div>
-                                <span className={`text-xs font-semibold px-2 py-1 rounded ${isClockedIn ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#f3f2f1] text-[#605e5c]'}`}>{isClockedIn ? 'Present' : 'Absent'}</span>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded ${hasPunchedOut ? 'bg-[#f3f2f1] text-[#605e5c]' : isClockedIn ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#fff4ce] text-[#795c00]'}`}>
+                                    {hasPunchedOut ? 'Completed' : isClockedIn ? 'Present' : 'Not Punched In'}
+                                </span>
                             </div>
                             <p className="text-[#605e5c] text-xs font-semibold uppercase">Attendance</p>
-                            <p className="text-xl font-semibold text-[#323130]">{isClockedIn ? 'Clocked In' : 'Clocked Out'}</p>
+                            <p className="text-xl font-semibold text-[#323130]">{hasPunchedOut ? 'Clocked Out' : isClockedIn ? 'Clocked In' : 'Pending IN'}</p>
                         </div>
-                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all cursor-pointer" onClick={()=>setActiveTab('tasks')}>
                             <div className="flex justify-between items-start mb-2">
                                 <div className="p-2 bg-[#f3f2f1] text-[#0078d4] rounded"><Lucide.CheckSquare size={20} /></div>
                                 <span className="text-xs font-semibold px-2 py-1 rounded bg-[#eff6fc] text-[#0078d4]">{tasks.filter(t=>t.status==='done').length} Done</span>
@@ -271,14 +270,14 @@
                             <p className="text-[#605e5c] text-xs font-semibold uppercase">My Tasks</p>
                             <p className="text-xl font-semibold text-[#323130]">{tasks.filter(t=>t.assignee===user.name && t.status!=='done').length} Pending</p>
                         </div>
-                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all cursor-pointer" onClick={()=>setActiveTab('eod')}>
                             <div className="flex justify-between items-start mb-2">
                                 <div className="p-2 bg-[#f3f2f1] text-[#d83b01] rounded"><Lucide.FileText size={20} /></div>
                             </div>
                             <p className="text-[#605e5c] text-xs font-semibold uppercase">Daily Reports</p>
                             <p className="text-xl font-semibold text-[#323130]">{reports.filter(r=>r.userId===user.uid).length} Submitted</p>
                         </div>
-                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all">
+                        <div className="bg-white p-5 rounded shadow-sm border border-[#edebe9] hover:border-[#c8c6c4] transition-all cursor-pointer" onClick={()=>setActiveTab('notices')}>
                             <div className="flex justify-between items-start mb-2">
                                 <div className="p-2 bg-[#f3f2f1] text-[#107c10] rounded"><Lucide.Target size={20} /></div>
                             </div>
@@ -290,9 +289,16 @@
                     <div className="bg-white rounded shadow-sm border border-[#edebe9] p-5">
                         <h3 className="font-semibold text-[#323130] mb-4 text-sm uppercase tracking-wider">Quick Actions</h3>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <button onClick={() => onMarkAttendance(isClockedIn ? 'OUT' : 'IN')} className={`p-4 rounded border flex flex-col items-center justify-center gap-2 transition-all ${isClockedIn ? 'bg-white border-[#fde7e9] text-[#a4262c] hover:bg-[#fde7e9]' : 'bg-white border-[#dff6dd] text-[#107c10] hover:bg-[#dff6dd]'}`}>
-                                {isClockedIn ? <Lucide.LogOut size={24}/> : <Lucide.LogIn size={24}/>}
-                                <span className="text-xs font-semibold">{isClockedIn ? 'Punch Out' : 'Punch In'}</span>
+                            <button 
+                                disabled={hasPunchedOut}
+                                onClick={() => {
+                                    if (!hasPunchedIn) onMarkAttendance('IN');
+                                    else if (!hasPunchedOut) onMarkAttendance('OUT');
+                                }} 
+                                className={`p-4 rounded border flex flex-col items-center justify-center gap-2 transition-all ${hasPunchedOut ? 'bg-[#f3f2f1] border-[#edebe9] text-[#a19f9d] cursor-not-allowed' : isClockedIn ? 'bg-white border-[#fde7e9] text-[#a4262c] hover:bg-[#fde7e9]' : 'bg-white border-[#dff6dd] text-[#107c10] hover:bg-[#dff6dd]'}`}
+                            >
+                                {hasPunchedOut ? <Lucide.CheckCircle size={24}/> : (isClockedIn ? <Lucide.LogOut size={24}/> : <Lucide.LogIn size={24}/>)}
+                                <span className="text-xs font-semibold">{hasPunchedOut ? 'Completed' : (isClockedIn ? 'Punch Out' : 'Punch In')}</span>
                             </button>
                             <button onClick={()=>setActiveTab('tasks')} className="p-4 rounded border border-[#edebe9] hover:border-[#0078d4] hover:bg-[#f3f2f1] text-[#323130] flex flex-col items-center justify-center gap-2 transition-all">
                                 <Lucide.PlusSquare size={24} className="text-[#0078d4]" />
@@ -316,29 +322,33 @@
             );
         };
 
-        // --- CORE MODULES (Restored) ---
-        
         const AdminPayrollManager = ({ users, onUpdateSalary }) => {
             const [selectedUser, setSelectedUser] = useState(null);
-            const [salary, setSalary] = useState({ basic: 0, hra: 0, da: 0, special: 0, pf: 0, tax: 0 });
+            const [salary, setSalary] = useState({ 
+                basic: 0, hra: 0, da: 0, conveyance: 0, medical: 0, special: 0, otherAllowances: 0, overtimePay: 0, bonus: 0,
+                pf: 0, pt: 0, tds: 0, esi: 0, loan: 0, leaveDeduction: 0, otherDeductions: 0
+            });
 
             const handleUserSelect = (e) => {
                 const uid = e.target.value;
                 if(!uid) { setSelectedUser(null); return; }
                 const user = users.find(u => u.id === uid);
                 setSelectedUser(user);
-                setSalary(user.salaryConfig || { basic: 0, hra: 0, da: 0, special: 0, pf: 0, tax: 0 });
+                setSalary(user.salaryConfig || { 
+                    basic: 0, hra: 0, da: 0, conveyance: 0, medical: 0, special: 0, otherAllowances: 0, overtimePay: 0, bonus: 0,
+                    pf: 0, pt: 0, tds: 0, esi: 0, loan: 0, leaveDeduction: 0, otherDeductions: 0 
+                });
             };
 
             const handleSave = async () => {
                 if(!selectedUser) return;
                 await onUpdateSalary(selectedUser.id, salary);
-                alert("Salary structure updated successfully!");
+                alert("Enterprise Salary Structure updated successfully!");
             };
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-semibold text-[#323130]">Payroll Management</h2></header>
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Enterprise Payroll Management</h2></header>
                     <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
                         <div className="mb-6">
                             <label className="block text-sm font-semibold text-[#323130] mb-2">Select Employee</label>
@@ -349,20 +359,35 @@
                         </div>
 
                         {selectedUser && (
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-[#0078d4] border-b border-[#edebe9] pb-2">Earnings Configuration</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="text-xs text-[#605e5c]">Basic Pay</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.basic} onChange={e=>setSalary({...salary, basic: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-[#605e5c]">HRA</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.hra} onChange={e=>setSalary({...salary, hra: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-[#605e5c]">DA</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.da} onChange={e=>setSalary({...salary, da: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-[#605e5c]">Special Allow.</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.special} onChange={e=>setSalary({...salary, special: parseInt(e.target.value)||0})} /></div>
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="font-semibold text-[#0078d4] border-b border-[#edebe9] pb-2 mb-4">Earnings Configuration</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        <div><label className="text-xs text-[#605e5c]">Basic Pay</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.basic} onChange={e=>setSalary({...salary, basic: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">HRA</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.hra} onChange={e=>setSalary({...salary, hra: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Dearness Allowance (DA)</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.da} onChange={e=>setSalary({...salary, da: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Conveyance Allowance</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.conveyance} onChange={e=>setSalary({...salary, conveyance: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Medical Allowance</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.medical} onChange={e=>setSalary({...salary, medical: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Special Allowance</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.special} onChange={e=>setSalary({...salary, special: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Other Allowances</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.otherAllowances} onChange={e=>setSalary({...salary, otherAllowances: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Overtime Pay</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.overtimePay} onChange={e=>setSalary({...salary, overtimePay: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Bonus & Incentives</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.bonus} onChange={e=>setSalary({...salary, bonus: parseFloat(e.target.value)||0})} /></div>
+                                    </div>
                                 </div>
-                                <h3 className="font-semibold text-[#a4262c] border-b border-[#edebe9] pb-2 mt-4">Deductions</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="text-xs text-[#605e5c]">PF</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.pf} onChange={e=>setSalary({...salary, pf: parseInt(e.target.value)||0})} /></div>
-                                    <div><label className="text-xs text-[#605e5c]">Tax</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.tax} onChange={e=>setSalary({...salary, tax: parseInt(e.target.value)||0})} /></div>
+                                
+                                <div>
+                                    <h3 className="font-semibold text-[#a4262c] border-b border-[#edebe9] pb-2 mb-4">Deductions Configuration</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        <div><label className="text-xs text-[#605e5c]">Provident Fund (PF)</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.pf} onChange={e=>setSalary({...salary, pf: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Professional Tax (PT)</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.pt} onChange={e=>setSalary({...salary, pt: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Income Tax / TDS</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.tds} onChange={e=>setSalary({...salary, tds: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">ESI Contribution</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.esi} onChange={e=>setSalary({...salary, esi: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Loan / Advance Recovery</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.loan} onChange={e=>setSalary({...salary, loan: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Leave / Attendance Deduction</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.leaveDeduction} onChange={e=>setSalary({...salary, leaveDeduction: parseFloat(e.target.value)||0})} /></div>
+                                        <div><label className="text-xs text-[#605e5c]">Other Deductions</label><input type="number" className="w-full border border-[#8a8886] p-2 rounded" value={salary.otherDeductions} onChange={e=>setSalary({...salary, otherDeductions: parseFloat(e.target.value)||0})} /></div>
+                                    </div>
                                 </div>
-                                <button onClick={handleSave} className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white py-2.5 rounded font-semibold mt-4 shadow-sm">Save Configuration</button>
+                                <button onClick={handleSave} className="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white py-3 rounded font-semibold mt-4 shadow-sm">Save Complete Configuration</button>
                             </div>
                         )}
                     </div>
@@ -370,56 +395,172 @@
             );
         };
 
-        const PayrollModule = ({ user }) => {
+        const PayrollModule = ({ user, attendanceLogs, leaves }) => {
             const { salaryConfig } = user;
             
             const downloadPDF = () => {
                 if(!salaryConfig) return;
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
+
+                // Safe Defaulting: If any field is missing, it automatically becomes 0.00
+                const safeVal = (val) => (val ? parseFloat(val) : 0);
                 
-                doc.setFontSize(20);
-                doc.text("Varun Dynamics - Payslip", 105, 20, null, null, "center");
-                doc.setFontSize(12);
-                doc.text(`Employee: ${user.name}`, 20, 40);
-                doc.text(`Role: ${user.role}`, 20, 50);
-                doc.text(`Date: ${new Date().toLocaleDateString()}`, 150, 40);
+                const s = {
+                    basic: safeVal(salaryConfig.basic), hra: safeVal(salaryConfig.hra), da: safeVal(salaryConfig.da), 
+                    conveyance: safeVal(salaryConfig.conveyance), medical: safeVal(salaryConfig.medical), 
+                    special: safeVal(salaryConfig.special), otherAllowances: safeVal(salaryConfig.otherAllowances), 
+                    overtimePay: safeVal(salaryConfig.overtimePay), bonus: safeVal(salaryConfig.bonus),
+                    pf: safeVal(salaryConfig.pf), pt: safeVal(salaryConfig.pt), tds: safeVal(salaryConfig.tds), 
+                    esi: safeVal(salaryConfig.esi), loan: safeVal(salaryConfig.loan), 
+                    leaveDeduction: safeVal(salaryConfig.leaveDeduction), otherDeductions: safeVal(salaryConfig.otherDeductions)
+                };
 
-                const earnings = [
-                    ["Basic Pay", salaryConfig.basic],
-                    ["HRA", salaryConfig.hra],
-                    ["DA", salaryConfig.da],
-                    ["Special Allowance", salaryConfig.special],
-                    ["GROSS EARNINGS", (salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special)]
-                ];
+                const gross = s.basic + s.hra + s.da + s.conveyance + s.medical + s.special + s.otherAllowances + s.overtimePay + s.bonus;
+                const deductions = s.pf + s.pt + s.tds + s.esi + s.loan + s.leaveDeduction + s.otherDeductions;
+                const net = gross - deductions;
 
-                const deductions = [
-                    ["Provident Fund", salaryConfig.pf],
-                    ["Professional Tax", salaryConfig.tax],
-                    ["TOTAL DEDUCTIONS", (salaryConfig.pf + salaryConfig.tax)]
-                ];
-
-                doc.autoTable({
-                    startY: 60,
-                    head: [['Earnings Head', 'Amount (INR)']],
-                    body: earnings,
-                    theme: 'grid',
-                    headStyles: { fillColor: [0, 120, 212] }
-                });
-
-                doc.autoTable({
-                    startY: doc.lastAutoTable.finalY + 10,
-                    head: [['Deductions Head', 'Amount (INR)']],
-                    body: deductions,
-                    theme: 'grid',
-                    headStyles: { fillColor: [164, 38, 44] }
-                });
-
-                const net = (salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special) - (salaryConfig.pf + salaryConfig.tax);
+                // Enterprise PDF Generation
+                doc.setFontSize(22);
+                doc.setTextColor(0, 120, 212);
+                doc.text("VARUN DYNAMICS", 105, 20, null, null, "center");
+                
                 doc.setFontSize(14);
-                doc.text(`NET PAYABLE: INR ${net}`, 20, doc.lastAutoTable.finalY + 20);
+                doc.setTextColor(50, 49, 48);
+                doc.text("Detailed Salary Payslip", 105, 28, null, null, "center");
 
-                doc.save("payslip.pdf");
+                doc.setDrawColor(237, 235, 233);
+                doc.line(14, 34, 196, 34);
+
+                // Calculate Month & Attendance Stats accurately
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                const totalMonthDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+                const presentDays = attendanceLogs.filter(l => l.userId === user.uid && l.type === 'IN' && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).getMonth() === currentMonth).length;
+                const paidLeaveDays = leaves.filter(l => l.userId === user.uid && l.status === 'Approved' && new Date(l.from).getMonth() === currentMonth).length;
+                const payableDays = Math.min(totalMonthDays, presentDays + paidLeaveDays + 8);
+                const absentDays = Math.max(0, totalMonthDays - payableDays);
+                
+                let totalWorkedHours = 0;
+                let overtimeHours = 0;
+                
+                // Advanced Time Calculation for Payslip
+                const monthLogs = attendanceLogs.filter(l => l.userId === user.uid && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).getMonth() === currentMonth);
+                const daysMap = {};
+                monthLogs.forEach(l => {
+                    const dStr = new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toDateString();
+                    if(!daysMap[dStr]) daysMap[dStr] = { in: null, out: null };
+                    if(l.type === 'IN') daysMap[dStr].in = l.timestamp?.toMillis ? l.timestamp.toMillis() : Date.now();
+                    if(l.type === 'OUT') daysMap[dStr].out = l.timestamp?.toMillis ? l.timestamp.toMillis() : Date.now();
+                });
+                
+                Object.values(daysMap).forEach(day => {
+                    if(day.in && day.out) {
+                        const ms = day.out - day.in;
+                        totalWorkedHours += (ms / 3600000);
+                        if (ms > 9 * 3600000) overtimeHours += ((ms - (9 * 3600000)) / 3600000);
+                    }
+                });
+
+                // Section: Employee Information
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+                doc.text("EMPLOYEE INFORMATION", 14, 42);
+                doc.setFont(undefined, 'normal');
+                
+                doc.autoTable({
+                    startY: 45,
+                    body: [
+                        ['Employee Name:', user.name, 'Pay Period:', new Date().toLocaleString('default', { month: 'long', year: 'numeric' })],
+                        ['Employee ID:', user.uid.substring(0, 8).toUpperCase(), 'Pay Date:', new Date().toLocaleDateString()],
+                        ['Designation:', user.role, 'Department:', user.department || 'General Org'],
+                        ['Organization:', 'Varun Dynamics', 'Payslip No:', `VD-${Math.floor(Math.random()*10000)}`],
+                        ['Joining Date:', user.createdAt ? new Date(user.createdAt.toDate ? user.createdAt.toDate() : Date.now()).toLocaleDateString() : 'N/A', '', '']
+                    ],
+                    theme: 'plain',
+                    styles: { fontSize: 9, cellPadding: 1.5, textColor: [50, 49, 48] }
+                });
+
+                // Section: Attendance Information
+                doc.setFont(undefined, 'bold');
+                doc.text("ATTENDANCE DETAILS", 14, doc.lastAutoTable.finalY + 10);
+                doc.setFont(undefined, 'normal');
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 13,
+                    body: [
+                        ['Total Month Days:', totalMonthDays, 'Total Payable Days:', payableDays],
+                        ['Present Days:', presentDays, 'Absent/LWP Days:', absentDays],
+                        ['Paid Leaves Taken:', paidLeaveDays, 'Required Hours/Day:', '9 Hours'],
+                        ['Total Worked Hours:', totalWorkedHours.toFixed(1) + ' hrs', 'Overtime Hours:', overtimeHours.toFixed(1) + ' hrs']
+                    ],
+                    theme: 'grid',
+                    styles: { fontSize: 9, cellPadding: 2 },
+                    headStyles: { fillColor: [243, 242, 241], textColor: [50, 49, 48] }
+                });
+
+                // Section: Earnings & Deductions Data Formatting
+                const earningsArr = [
+                    ["Basic Salary", s.basic.toFixed(2)],
+                    ["House Rent Allowance", s.hra.toFixed(2)],
+                    ["Dearness Allowance", s.da.toFixed(2)],
+                    ["Conveyance Allowance", s.conveyance.toFixed(2)],
+                    ["Medical Allowance", s.medical.toFixed(2)],
+                    ["Special Allowance", s.special.toFixed(2)],
+                    ["Other Allowances", s.otherAllowances.toFixed(2)],
+                    ["Overtime Pay", s.overtimePay.toFixed(2)],
+                    ["Bonus & Incentives", s.bonus.toFixed(2)],
+                    ["TOTAL GROSS EARNINGS", gross.toFixed(2)]
+                ];
+
+                const deductionsArr = [
+                    ["Provident Fund (PF)", s.pf.toFixed(2)],
+                    ["Professional Tax (PT)", s.pt.toFixed(2)],
+                    ["Income Tax / TDS", s.tds.toFixed(2)],
+                    ["ESI Contribution", s.esi.toFixed(2)],
+                    ["Loan / Advance Recovery", s.loan.toFixed(2)],
+                    ["Leave / Attendance Deduction", s.leaveDeduction.toFixed(2)],
+                    ["Other Deductions", s.otherDeductions.toFixed(2)],
+                    ["", ""],
+                    ["", ""],
+                    ["TOTAL DEDUCTIONS", deductions.toFixed(2)]
+                ];
+
+                doc.setFont(undefined, 'bold');
+                doc.text("SALARY BREAKDOWN", 14, doc.lastAutoTable.finalY + 12);
+                
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 15,
+                    head: [['EARNINGS', 'AMOUNT (INR)', 'DEDUCTIONS', 'AMOUNT (INR)']],
+                    body: earningsArr.map((earn, i) => [...earn, deductionsArr[i][0], deductionsArr[i][1]]),
+                    theme: 'grid',
+                    headStyles: { fillColor: [0, 120, 212], textColor: 255 },
+                    columnStyles: { 
+                        0: { cellWidth: 55 }, 1: { cellWidth: 30, halign: 'right' },
+                        2: { cellWidth: 60 }, 3: { cellWidth: 30, halign: 'right' }
+                    },
+                    willDrawCell: function (data) {
+                        if (data.row.index === earningsArr.length - 1) {
+                            doc.setFillColor(243, 242, 241);
+                            doc.setFont(undefined, 'bold');
+                        }
+                    }
+                });
+
+                // Section: Final Net Pay
+                doc.setDrawColor(0, 120, 212);
+                doc.setLineWidth(0.5);
+                doc.rect(14, doc.lastAutoTable.finalY + 10, 182, 15);
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text(`NET SALARY: INR ${net.toFixed(2)}`, 20, doc.lastAutoTable.finalY + 19);
+
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(161, 159, 157);
+                doc.text("This is a computer-generated document and requires no signature.", 105, doc.lastAutoTable.finalY + 35, null, null, "center");
+
+                doc.save(`Payslip_${user.name.replace(/\s+/g, '_')}_${new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}.pdf`);
             };
 
             if (!salaryConfig) {
@@ -432,32 +573,38 @@
                 );
             }
 
-            const gross = salaryConfig.basic + salaryConfig.hra + salaryConfig.da + salaryConfig.special;
-            const deductions = salaryConfig.pf + salaryConfig.tax;
+            // Fallback for visual rendering to 0.00
+            const safeVal = (val) => (val ? parseFloat(val) : 0);
+            const gross = safeVal(salaryConfig.basic) + safeVal(salaryConfig.hra) + safeVal(salaryConfig.da) + safeVal(salaryConfig.conveyance) + safeVal(salaryConfig.medical) + safeVal(salaryConfig.special) + safeVal(salaryConfig.otherAllowances) + safeVal(salaryConfig.overtimePay) + safeVal(salaryConfig.bonus);
+            const deductions = safeVal(salaryConfig.pf) + safeVal(salaryConfig.pt) + safeVal(salaryConfig.tds) + safeVal(salaryConfig.esi) + safeVal(salaryConfig.loan) + safeVal(salaryConfig.leaveDeduction) + safeVal(salaryConfig.otherDeductions);
             const net = gross - deductions;
 
             return (
                 <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-semibold text-[#323130]">My Payslip</h2></header>
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">My Payslip</h2>
+                        <p className="text-[#605e5c] text-sm mt-1">View and download your detailed salary breakdown.</p>
+                    </header>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-[#323130] rounded p-6 text-white shadow-sm border border-[#323130]">
-                            <p className="text-[#a19f9d] text-sm font-semibold uppercase tracking-wider mb-1">Total Net Payable</p>
-                            <h3 className="text-4xl font-semibold mb-6">₹ {net.toLocaleString()}</h3>
-                            <div className="grid grid-cols-2 gap-4 border-t border-[#605e5c] pt-4">
-                                <div><p className="text-[#a19f9d] text-xs">Gross Earnings</p><p className="font-semibold text-lg text-[#107c10]">₹ {gross.toLocaleString()}</p></div>
-                                <div><p className="text-[#a19f9d] text-xs">Total Deductions</p><p className="font-semibold text-lg text-[#fde7e9]">₹ {deductions.toLocaleString()}</p></div>
+                        <div className="bg-[#323130] rounded p-6 text-white shadow-sm border border-[#323130] flex flex-col justify-center relative overflow-hidden">
+                            <Lucide.Wallet size={120} className="absolute -right-10 -bottom-10 opacity-10" />
+                            <p className="text-[#a19f9d] text-sm font-semibold uppercase tracking-wider mb-1 relative z-10">Total Net Payable</p>
+                            <h3 className="text-4xl font-semibold mb-6 relative z-10">₹ {net.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
+                            <div className="grid grid-cols-2 gap-4 border-t border-[#605e5c] pt-4 relative z-10">
+                                <div><p className="text-[#a19f9d] text-xs">Gross Earnings</p><p className="font-semibold text-lg text-[#107c10]">₹ {gross.toLocaleString(undefined, {minimumFractionDigits: 2})}</p></div>
+                                <div><p className="text-[#a19f9d] text-xs">Total Deductions</p><p className="font-semibold text-lg text-[#fde7e9]">₹ {deductions.toLocaleString(undefined, {minimumFractionDigits: 2})}</p></div>
                             </div>
                         </div>
                         <div className="bg-white rounded shadow-sm border border-[#edebe9] p-6">
-                            <h3 className="font-semibold text-[#323130] mb-4 border-b border-[#edebe9] pb-2">Breakdown</h3>
+                            <h3 className="font-semibold text-[#323130] mb-4 border-b border-[#edebe9] pb-2 flex items-center gap-2"><Lucide.FileText size={18}/> Summary</h3>
                             <div className="space-y-3 text-sm">
-                                <div className="flex justify-between"><span className="text-[#605e5c]">Basic Pay</span><span className="font-semibold">₹ {salaryConfig.basic}</span></div>
-                                <div className="flex justify-between"><span className="text-[#605e5c]">HRA</span><span className="font-semibold">₹ {salaryConfig.hra}</span></div>
-                                <div className="flex justify-between"><span className="text-[#605e5c]">Allowances</span><span className="font-semibold">₹ {salaryConfig.da + salaryConfig.special}</span></div>
-                                <div className="flex justify-between text-[#a4262c]"><span className="text-[#605e5c]">Deductions (PF/Tax)</span><span className="font-semibold">- ₹ {deductions}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">Basic Pay</span><span className="font-semibold">₹ {safeVal(salaryConfig.basic).toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">HRA</span><span className="font-semibold">₹ {safeVal(salaryConfig.hra).toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span className="text-[#605e5c]">Other Allowances</span><span className="font-semibold">₹ {(gross - safeVal(salaryConfig.basic) - safeVal(salaryConfig.hra)).toFixed(2)}</span></div>
+                                <div className="flex justify-between text-[#a4262c]"><span className="text-[#605e5c]">Total Deductions</span><span className="font-semibold">- ₹ {deductions.toFixed(2)}</span></div>
                             </div>
-                            <button onClick={downloadPDF} className="w-full mt-6 bg-[#0078d4] text-white py-2.5 rounded text-sm font-semibold hover:bg-[#106ebe] transition-colors flex items-center justify-center gap-2 shadow-sm">
-                                <Lucide.Download size={16}/> Download PDF
+                            <button onClick={downloadPDF} className="w-full mt-6 bg-[#0078d4] text-white py-3 rounded text-sm font-semibold hover:bg-[#106ebe] transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                <Lucide.Download size={18}/> Download Detailed PDF
                             </button>
                         </div>
                     </div>
@@ -466,31 +613,138 @@
         };
 
         const AttendanceModule = ({ user, allUsers, attendanceLogs, onMarkAttendance }) => {
-            const today = new Date().toLocaleDateString();
+            const todayStr = new Date().toDateString();
             
-            // Employee View
+            // Logic shared across views
+            const REQUIRED_MS = 9 * 3600000; // 9 Hours Fixed
+
+            const calculateDailyStats = (logs) => {
+                const inLog = logs.find(l => l.type === 'IN');
+                const outLog = logs.find(l => l.type === 'OUT');
+                
+                const hasPunchedIn = !!inLog;
+                const hasPunchedOut = !!outLog;
+                
+                const punchInTime = hasPunchedIn ? new Date(inLog.timestamp?.toDate ? inLog.timestamp.toDate() : Date.now()) : null;
+                const punchOutTime = hasPunchedOut ? new Date(outLog.timestamp?.toDate ? outLog.timestamp.toDate() : Date.now()) : null;
+
+                let workedMs = 0;
+                if (hasPunchedIn && hasPunchedOut) {
+                    workedMs = punchOutTime - punchInTime;
+                } else if (hasPunchedIn) {
+                    workedMs = Date.now() - punchInTime;
+                }
+
+                const workedH = Math.floor(workedMs / 3600000);
+                const workedM = Math.floor((workedMs % 3600000) / 60000);
+                const diffMs = workedMs - REQUIRED_MS;
+                const overTimeH = diffMs > 0 ? Math.floor(diffMs / 3600000) : 0;
+                const overTimeM = diffMs > 0 ? Math.floor((diffMs % 3600000) / 60000) : 0;
+                const shortH = diffMs < 0 ? Math.floor(Math.abs(diffMs) / 3600000) : 0;
+                const shortM = diffMs < 0 ? Math.floor((Math.abs(diffMs) % 3600000) / 60000) : 0;
+
+                let statusText = "Not Punched In";
+                let statusColor = "text-[#605e5c] bg-[#f3f2f1]";
+                
+                if (hasPunchedIn && !hasPunchedOut) {
+                    statusText = "Working";
+                    statusColor = "text-[#0078d4] bg-[#eff6fc]";
+                } else if (hasPunchedOut) {
+                    if (diffMs >= 0) {
+                        statusText = diffMs > 300000 ? "Overtime" : "Completed";
+                        statusColor = "text-[#107c10] bg-[#dff6dd]";
+                    } else {
+                        statusText = "Short Hours";
+                        statusColor = "text-[#975a16] bg-[#fff4ce]";
+                    }
+                } else if (!hasPunchedIn && new Date().getHours() > 12) {
+                    statusText = "Absent";
+                    statusColor = "text-[#a4262c] bg-[#fde7e9]";
+                }
+
+                return { hasPunchedIn, hasPunchedOut, punchInTime, punchOutTime, workedH, workedM, diffMs, overTimeH, overTimeM, shortH, shortM, statusText, statusColor };
+            };
+
+            // Employee View Logic
             if (user.role !== 'Admin') {
-                const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate ? log.timestamp.toDate() : Date.now()).toLocaleDateString() === today).sort((a, b) => (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()) - (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()));
-                const lastStatus = todaysLogs.length > 0 ? todaysLogs[0].type : 'OUT';
+                const todaysLogs = attendanceLogs.filter(log => log.userId === user.uid && new Date(log.timestamp?.toDate ? log.timestamp.toDate() : Date.now()).toDateString() === todayStr)
+                                                 .sort((a,b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()));
+                
+                const stats = calculateDailyStats(todaysLogs);
+
                 return (
                     <div className="space-y-6 animate-fade-in pb-20">
-                        <header><h2 className="text-2xl font-semibold text-[#323130]">My Attendance</h2></header>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="md:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] p-6 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
-                                <h3 className="text-lg font-medium text-[#323130]">{lastStatus === 'IN' ? 'You are Clocked In' : 'You are Clocked Out'}</h3>
-                                <button onClick={() => onMarkAttendance(lastStatus === 'IN' ? 'OUT' : 'IN')} className={`w-40 h-40 rounded flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-md border border-[#edebe9] ${lastStatus === 'IN' ? 'bg-[#fde7e9] text-[#a4262c] hover:bg-[#fbd3d6]' : 'bg-[#dff6dd] text-[#107c10] hover:bg-[#c3f1c0]'}`}>
-                                    <div className={`p-3 rounded ${lastStatus === 'IN' ? 'bg-white' : 'bg-white'}`}>{lastStatus === 'IN' ? <Lucide.LogOut size={24} /> : <Lucide.LogIn size={24} />}</div>
-                                    <span className="font-semibold">{lastStatus === 'IN' ? 'PUNCH OUT' : 'PUNCH IN'}</span>
-                                </button>
-                            </div>
-                            <div className="bg-white rounded shadow-sm border border-[#edebe9] p-4 h-[300px] overflow-auto">
-                                <h3 className="font-semibold text-[#323130] mb-2">Today's Logs</h3>
-                                {todaysLogs.map(log => (
-                                    <div key={log.id} className="flex items-center gap-3 p-2 border-b border-[#f3f2f1]">
-                                        <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-[#107c10]' : 'bg-[#a4262c]'}`} />
-                                        <div className="text-sm text-[#323130]"><span className="font-semibold">{log.type === 'IN' ? 'IN' : 'OUT'}</span> <span className="text-[#605e5c] text-xs ml-2">{new Date(log.timestamp?.toDate ? log.timestamp.toDate() : Date.now()).toLocaleTimeString()}</span></div>
+                        <header>
+                            <h2 className="text-2xl font-semibold text-[#323130]">Daily Attendance</h2>
+                            <p className="text-sm text-[#605e5c] mt-1">Record and track your 9-hour daily work requirement. Strictly ONE punch-in and punch-out allowed per day.</p>
+                        </header>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Action Panel */}
+                            <div className="lg:col-span-2 bg-white rounded shadow-sm border border-[#edebe9] p-6 flex flex-col md:flex-row items-center gap-8 justify-center min-h-[300px]">
+                                <div className="flex flex-col items-center justify-center gap-4 text-center">
+                                    <button 
+                                        onClick={() => !stats.hasPunchedIn && onMarkAttendance('IN')} 
+                                        disabled={stats.hasPunchedIn}
+                                        className={`w-36 h-36 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-md border-4 ${stats.hasPunchedIn ? 'bg-[#f3f2f1] text-[#a19f9d] border-[#edebe9] cursor-not-allowed opacity-70' : 'bg-white text-[#107c10] border-[#dff6dd] hover:bg-[#f2fbf1]'}`}
+                                    >
+                                        <Lucide.LogIn size={32} />
+                                        <span className="font-bold text-sm tracking-wide">PUNCH IN</span>
+                                    </button>
+                                    <div>
+                                        <p className="text-xs font-semibold text-[#605e5c] uppercase">Time In</p>
+                                        <p className="font-mono text-lg font-bold text-[#323130]">{stats.punchInTime ? stats.punchInTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</p>
                                     </div>
-                                ))}
+                                </div>
+                                
+                                <div className="hidden md:flex flex-col items-center justify-center px-4 relative h-full">
+                                    <div className="h-0.5 w-16 bg-[#edebe9]"></div>
+                                    <span className={`absolute bg-white px-2 text-xs font-bold uppercase rounded border ${stats.statusColor}`}>{stats.statusText}</span>
+                                </div>
+
+                                <div className="flex flex-col items-center justify-center gap-4 text-center">
+                                    <button 
+                                        onClick={() => !stats.hasPunchedOut && onMarkAttendance('OUT')} 
+                                        disabled={!stats.hasPunchedIn || stats.hasPunchedOut}
+                                        className={`w-36 h-36 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-md border-4 ${(!stats.hasPunchedIn || stats.hasPunchedOut) ? 'bg-[#f3f2f1] text-[#a19f9d] border-[#edebe9] cursor-not-allowed opacity-70' : 'bg-white text-[#a4262c] border-[#fde7e9] hover:bg-[#fff4f5]'}`}
+                                    >
+                                        <Lucide.LogOut size={32} />
+                                        <span className="font-bold text-sm tracking-wide">PUNCH OUT</span>
+                                    </button>
+                                    <div>
+                                        <p className="text-xs font-semibold text-[#605e5c] uppercase">Time Out</p>
+                                        <p className="font-mono text-lg font-bold text-[#323130]">{stats.punchOutTime ? stats.punchOutTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Summary Metrics */}
+                            <div className="bg-white rounded shadow-sm border border-[#edebe9] p-5 flex flex-col gap-4">
+                                <h3 className="font-semibold text-[#323130] border-b border-[#edebe9] pb-2">Today's Calculation</h3>
+                                <div className="flex justify-between items-center bg-[#faf9f8] p-3 rounded border border-[#edebe9]">
+                                    <span className="text-sm font-semibold text-[#605e5c]">Status</span>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${stats.statusColor}`}>{stats.statusText}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-2">
+                                    <div className="border border-[#edebe9] rounded p-3 text-center bg-[#faf9f8]">
+                                        <p className="text-xs text-[#605e5c] uppercase font-semibold mb-1">Required</p>
+                                        <p className="text-lg font-bold text-[#323130]">9h 0m</p>
+                                    </div>
+                                    <div className="border border-[#0078d4] rounded p-3 text-center bg-[#eff6fc]">
+                                        <p className="text-xs text-[#0078d4] uppercase font-semibold mb-1">Worked</p>
+                                        <p className="text-lg font-bold text-[#0078d4]">{stats.workedH}h {stats.workedM}m</p>
+                                    </div>
+                                </div>
+                                {stats.hasPunchedOut && (
+                                    <div className={`mt-2 border rounded p-3 text-center ${stats.diffMs >= 0 ? 'bg-[#dff6dd] border-[#c3f1c0]' : 'bg-[#fff4ce] border-[#ffe78c]'}`}>
+                                        <p className={`text-xs uppercase font-semibold mb-1 ${stats.diffMs >= 0 ? 'text-[#107c10]' : 'text-[#975a16]'}`}>
+                                            {stats.diffMs >= 0 ? 'Overtime Logged' : 'Short Hours'}
+                                        </p>
+                                        <p className={`text-lg font-bold ${stats.diffMs >= 0 ? 'text-[#107c10]' : 'text-[#975a16]'}`}>
+                                            {stats.diffMs >= 0 ? `${stats.overTimeH}h ${stats.overTimeM}m` : `${stats.shortH}h ${stats.shortM}m`}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -500,188 +754,47 @@
             // Admin View
             return (
                 <div className="space-y-6 animate-fade-in pb-20">
-                    <header><h2 className="text-2xl font-semibold text-[#323130]">Team Attendance</h2></header>
-                    <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Status Today</th><th className="px-6 py-3">Last Active</th></tr></thead>
-                            <tbody className="divide-y divide-[#edebe9]">
-                                {allUsers.map(u => {
-                                    if(u.id === user.uid) return null; // Skip self in admin view
-                                    const userLogs = attendanceLogs.filter(l => l.userId === u.id && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toLocaleDateString() === today);
-                                    const isPresent = userLogs.some(l => l.type === 'IN');
-                                    return (
-                                        <tr key={u.id} className="hover:bg-[#faf9f8]">
-                                            <td className="px-6 py-4 font-semibold text-[#323130]">{u.name}</td>
-                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-semibold ${isPresent ? 'bg-[#dff6dd] text-[#107c10]' : 'bg-[#fde7e9] text-[#a4262c]'}`}>{isPresent ? 'Present' : 'Absent'}</span></td>
-                                            <td className="px-6 py-4 text-[#605e5c]">{u.lastActive?.toDate ? new Date(u.lastActive.toDate()).toLocaleTimeString() : 'N/A'}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-        };
-
-        const HelpDeskModule = ({ user, tickets, onRaiseTicket, onUpdateStatus }) => {
-            const [subject, setSubject] = useState('');
-            const [category, setCategory] = useState('IT Support');
-            const [desc, setDesc] = useState('');
-
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                if(!subject) return;
-                onRaiseTicket({ subject, category, description: desc, status: 'Open', userId: user.uid, userName: user.name, timestamp: serverTimestamp() });
-                setSubject(''); setDesc('');
-            };
-
-            const myTickets = user.role === 'Admin' ? tickets : tickets.filter(t => t.userId === user.uid);
-
-            return (
-                <div className="space-y-6 pb-20 animate-fade-in">
-                    <header>
-                        <h2 className="text-2xl font-semibold text-[#323130]">Help Desk</h2>
-                    </header>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
-                            <h3 className="font-semibold text-[#323130] mb-4">Raise New Ticket</h3>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <select className="w-full border border-[#8a8886] p-2 rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={category} onChange={e=>setCategory(e.target.value)}>
-                                    <option>IT Support</option><option>HR Query</option><option>Facility/Maintenance</option><option>Accounts</option>
-                                </select>
-                                <input type="text" className="w-full border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" placeholder="Subject" value={subject} onChange={e=>setSubject(e.target.value)} required />
-                                <textarea className="w-full border border-[#8a8886] p-2 rounded text-base h-32 resize-none focus:ring-2 focus:ring-[#0078d4]" placeholder="Describe the issue..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
-                                <button className="w-full bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Submit Ticket</button>
-                            </form>
-                        </div>
-                        <div className="lg:col-span-2 space-y-4">
-                            {myTickets.map(ticket => (
-                                <div key={ticket.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9]">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#f3f2f1] text-[#605e5c]">{ticket.category}</span>
-                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${ticket.status==='Open'?'bg-[#dff6dd] text-[#107c10]': ticket.status==='Resolved' ? 'bg-[#eff6fc] text-[#0078d4]' : 'bg-[#f3f2f1] text-[#605e5c]'}`}>{ticket.status}</span>
-                                            </div>
-                                            <h4 className="font-semibold text-[#323130]">{ticket.subject}</h4>
-                                            <p className="text-sm text-[#605e5c] mt-1">{ticket.description}</p>
-                                            {user.role === 'Admin' && <p className="text-xs text-[#0078d4] mt-1 font-semibold">Raised by: {ticket.userName}</p>}
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xs text-[#605e5c] mb-2">{new Date(ticket.timestamp?.toDate ? ticket.timestamp.toDate() : Date.now()).toLocaleDateString()}</p>
-                                            {user.role === 'Admin' && (
-                                                <select 
-                                                    className="text-xs border border-[#8a8886] p-1 rounded bg-white text-[#323130]"
-                                                    value={ticket.status}
-                                                    onChange={(e) => onUpdateStatus(ticket.id, e.target.value)}
-                                                >
-                                                    <option value="Open">Open</option>
-                                                    <option value="In Progress">In Progress</option>
-                                                    <option value="Resolved">Resolved</option>
-                                                </select>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            {myTickets.length === 0 && <div className="text-center py-10 text-[#605e5c] bg-white rounded border border-dashed border-[#edebe9]">No active tickets.</div>}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const NoticesModule = ({ user, announcements, onPostNotice, onDeleteNotice }) => {
-            const [title, setTitle] = useState('');
-            const [content, setContent] = useState('');
-            const [type, setType] = useState('General');
-
-            const handlePost = (e) => {
-                e.preventDefault();
-                onPostNotice({ title, content, type, author: user.name, timestamp: serverTimestamp() });
-                setTitle(''); setContent('');
-            };
-
-            return (
-                <div className="space-y-6 pb-20 animate-fade-in">
-                    <header><h2 className="text-2xl font-semibold text-[#323130]">Notice Board</h2></header>
-                    {user.role === 'Admin' && (
-                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
-                            <form onSubmit={handlePost} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <input type="text" className="col-span-2 border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Notice Title" value={title} onChange={e=>setTitle(e.target.value)} required />
-                                    <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" value={type} onChange={e=>setType(e.target.value)}><option>General</option><option>Urgent</option><option>Event</option><option>Holiday</option></select>
-                                </div>
-                                <textarea className="w-full border border-[#8a8886] p-2 rounded h-24 focus:ring-2 focus:ring-[#0078d4]" placeholder="Content..." value={content} onChange={e=>setContent(e.target.value)} required></textarea>
-                                <button className="bg-[#0078d4] hover:bg-[#106ebe] text-white px-6 py-2 rounded shadow-sm font-semibold">Post Notice</button>
-                            </form>
-                        </div>
-                    )}
-                    <div className="space-y-4">
-                        {announcements.map(ann => (
-                            <div key={ann.id} className="bg-white p-4 rounded border border-[#edebe9] flex justify-between items-start shadow-sm">
-                                <div>
-                                    <h4 className="font-semibold text-[#323130]">{ann.title} <span className="text-xs bg-[#f3f2f1] px-2 rounded ml-2 font-normal">{ann.type}</span></h4>
-                                    <p className="text-sm text-[#605e5c] mt-1">{ann.content}</p>
-                                </div>
-                                {user.role === 'Admin' && <button onClick={()=>onDeleteNotice(ann.id)} className="text-[#a4262c] text-xs hover:underline font-semibold">Delete</button>}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-        };
-
-        const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
-            const [newName, setNewName] = useState('');
-            const [newEmail, setNewEmail] = useState('');
-            const [newRole, setNewRole] = useState('Employee');
-            const [newLocation, setNewLocation] = useState('Delhi Unit');
-            const [newPhoto, setNewPhoto] = useState('');
-            const [isAdding, setIsAdding] = useState(false);
-
-            const handleAdd = (e) => {
-                e.preventDefault();
-                if (!newEmail || !newName) return;
-                if (allUsers.some(u => u.email === newEmail)) { alert("User already exists!"); return; }
-                onAddUser({ name: newName, email: newEmail.toLowerCase().trim(), role: newRole, location: newLocation, photoURL: newPhoto, createdAt: serverTimestamp() });
-                setNewName(''); setNewEmail(''); setNewPhoto(''); setIsAdding(false);
-            };
-
-            return (
-                <div className="space-y-6 pb-20 animate-fade-in">
-                    <header className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                        <h2 className="text-2xl font-semibold text-[#323130]">User Management</h2>
-                        <button onClick={() => setIsAdding(!isAdding)} className="bg-white border border-[#edebe9] text-[#323130] px-4 py-2 rounded flex items-center gap-2 hover:bg-[#f3f2f1] transition-colors self-start md:self-auto shadow-sm">
-                            {isAdding ? <Lucide.X size={18} /> : <Lucide.UserPlus size={18} />} {isAdding ? 'Cancel' : 'Add User'}
-                        </button>
-                    </header>
-                    {isAdding && (
-                        <div className="bg-white p-6 rounded border border-[#0078d4] shadow-sm animate-fade-in">
-                            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input type="text" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full Name" />
-                                <input type="email" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
-                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newRole} onChange={e => setNewRole(e.target.value)}><option>Employee</option><option>Manager</option><option>Director</option><option>Business Partner</option></select>
-                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newLocation} onChange={e => setNewLocation(e.target.value)}><option>Delhi Unit</option><option>Mumbai HQ</option><option>Bangalore Hub</option><option>Remote</option></select>
-                                <div className="md:col-span-2"><input type="text" className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" /></div>
-                                <button className="md:col-span-2 w-full bg-[#107c10] hover:bg-[#0b5a0b] text-white py-2 rounded font-semibold mt-2 shadow-sm">Confirm Registration</button>
-                            </form>
-                        </div>
-                    )}
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Team Attendance Overview</h2></header>
                     <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left min-w-[600px]">
-                                <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs font-semibold"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr></thead>
+                            <table className="w-full text-sm text-left whitespace-nowrap">
+                                <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs">
+                                    <tr>
+                                        <th className="px-6 py-3">Employee</th>
+                                        <th className="px-6 py-3">Time In</th>
+                                        <th className="px-6 py-3">Time Out</th>
+                                        <th className="px-6 py-3 text-right">Worked</th>
+                                        <th className="px-6 py-3 text-right">Required</th>
+                                        <th className="px-6 py-3 text-right">Over/Short</th>
+                                        <th className="px-6 py-3">Status</th>
+                                    </tr>
+                                </thead>
                                 <tbody className="divide-y divide-[#edebe9]">
-                                    {allUsers.map(user => (
-                                        <tr key={user.id} className="hover:bg-[#faf9f8] transition-colors">
-                                            <td className="px-6 py-4 flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-[#f3f2f1] border border-[#edebe9] flex items-center justify-center overflow-hidden flex-shrink-0">{user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-semibold text-[#605e5c]">{user.name.charAt(0)}</span>}</div><span className="font-semibold text-[#323130]">{user.name}</span></td>
-                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-semibold border border-[#edebe9] bg-[#f3f2f1] text-[#323130] whitespace-nowrap">{user.role}</span></td>
-                                            <td className="px-6 py-4 text-[#605e5c]">{user.email}</td>
-                                            <td className="px-6 py-4 text-right">{user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-[#a4262c] hover:underline font-semibold">Remove</button>}</td>
-                                        </tr>
-                                    ))}
+                                    {allUsers.map(u => {
+                                        if(u.id === user.uid) return null;
+                                        const userLogs = attendanceLogs.filter(l => l.userId === u.id && new Date(l.timestamp?.toDate ? l.timestamp.toDate() : Date.now()).toDateString() === todayStr)
+                                                                       .sort((a,b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : Date.now()) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : Date.now()));
+                                        
+                                        const stats = calculateDailyStats(userLogs);
+
+                                        return (
+                                            <tr key={u.id} className="hover:bg-[#faf9f8]">
+                                                <td className="px-6 py-4 font-semibold text-[#323130]">{u.name}</td>
+                                                <td className="px-6 py-4 font-mono text-xs">{stats.punchInTime ? stats.punchInTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</td>
+                                                <td className="px-6 py-4 font-mono text-xs">{stats.punchOutTime ? stats.punchOutTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-[#605e5c]">{stats.hasPunchedIn ? `${stats.workedH}h ${stats.workedM}m` : '--'}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-[#605e5c]">9h 0m</td>
+                                                <td className="px-6 py-4 text-right font-medium">
+                                                    {stats.hasPunchedOut ? (
+                                                        stats.diffMs >= 0 
+                                                        ? <span className="text-[#107c10]">+ {stats.overTimeH}h {stats.overTimeM}m</span> 
+                                                        : <span className="text-[#a4262c]">- {stats.shortH}h {stats.shortM}m</span>
+                                                    ) : '--'}
+                                                </td>
+                                                <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-semibold ${stats.statusColor}`}>{stats.statusText}</span></td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -692,62 +805,172 @@
 
         const TaskBoard = ({ user, tasks, onAddTask, onUpdateTaskStatus, onDeleteTask }) => {
             const [newTaskTitle, setNewTaskTitle] = useState('');
+            const [newTaskDesc, setNewTaskDesc] = useState('');
             const [newTaskAssignee, setNewTaskAssignee] = useState('');
+            const [newTaskPriority, setNewTaskPriority] = useState('Medium');
+            const [newTaskLevel, setNewTaskLevel] = useState('Operational');
+            const [newTaskStartDate, setNewTaskStartDate] = useState('');
+            const [newTaskDueDate, setNewTaskDueDate] = useState('');
+            
             const [isAdding, setIsAdding] = useState(false);
+            const [expandedTask, setExpandedTask] = useState(null);
+
             const columns = [{ id: 'todo', label: 'To Do', color: 'bg-[#faf9f8]' }, { id: 'in_progress', label: 'In Progress', color: 'bg-[#eff6fc]' }, { id: 'done', label: 'Completed', color: 'bg-[#dff6dd]' }];
 
             const handleAdd = (e) => {
                 e.preventDefault();
                 if (!newTaskTitle.trim()) return;
-                onAddTask({ title: newTaskTitle, assignee: newTaskAssignee || 'Anyone', status: 'todo', createdBy: user.name, createdAt: serverTimestamp() });
-                setNewTaskTitle(''); setNewTaskAssignee(''); setIsAdding(false);
+                onAddTask({ 
+                    title: newTaskTitle, description: newTaskDesc, assignee: newTaskAssignee || 'Anyone', 
+                    status: 'todo', priority: newTaskPriority, taskLevel: newTaskLevel, 
+                    startDate: newTaskStartDate, dueDate: newTaskDueDate, progress: 0, 
+                    subtasks: [], createdBy: user.name, createdAt: serverTimestamp() 
+                });
+                setNewTaskTitle(''); setNewTaskDesc(''); setNewTaskAssignee(''); setIsAdding(false);
             };
 
             const handleStatusChange = (id, status) => {
                 const updateData = { status };
                 if (status === 'done') {
                     updateData.completedAt = serverTimestamp();
+                    updateData.progress = 100;
+                }
+                if (status === 'in_progress') {
+                    updateData.progress = Math.max(25, tasks.find(t=>t.id===id)?.progress || 25);
                 }
                 onUpdateTaskStatus(id, updateData);
+            };
+
+            const handleProgressChange = (id, progress) => {
+                const p = parseInt(progress);
+                let updateData = { progress: p };
+                if (p === 100) { updateData.status = 'done'; updateData.completedAt = serverTimestamp(); }
+                else if (p > 0 && tasks.find(t=>t.id===id).status === 'todo') { updateData.status = 'in_progress'; }
+                onUpdateTaskStatus(id, updateData);
+            };
+
+            const toggleSubtask = (taskId, subtaskIndex) => {
+                const task = tasks.find(t => t.id === taskId);
+                const newSubtasks = [...(task.subtasks || [])];
+                newSubtasks[subtaskIndex].completed = !newSubtasks[subtaskIndex].completed;
+                onUpdateTaskStatus(taskId, { subtasks: newSubtasks });
+            };
+
+            const addSubtask = (e, taskId) => {
+                if(e.key === 'Enter' && e.target.value.trim()) {
+                    const task = tasks.find(t => t.id === taskId);
+                    const newSubtasks = [...(task.subtasks || []), { title: e.target.value.trim(), completed: false }];
+                    onUpdateTaskStatus(taskId, { subtasks: newSubtasks });
+                    e.target.value = '';
+                }
+            };
+
+            const getPriorityColor = (p) => {
+                if(p === 'Critical') return 'bg-[#fde7e9] text-[#a4262c] border-[#fbd3d6]';
+                if(p === 'Urgent') return 'bg-[#fff4ce] text-[#d83b01] border-[#ffe78c]';
+                if(p === 'High') return 'bg-[#fff4ce] text-[#795c00] border-[#ffe78c]';
+                if(p === 'Low') return 'bg-[#f3f2f1] text-[#605e5c] border-[#edebe9]';
+                return 'bg-[#eff6fc] text-[#0078d4] border-[#c7e0f4]';
             };
 
             return (
                 <div className="space-y-6 pb-4 h-full flex flex-col animate-fade-in">
                     <header className="flex justify-between items-center">
-                        <h2 className="text-2xl font-semibold text-[#323130]">Task Board</h2>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Enterprise Task Board</h2>
                         <button onClick={() => setIsAdding(!isAdding)} className="bg-white border border-[#edebe9] text-[#323130] px-4 py-2 rounded flex items-center gap-2 shadow-sm hover:bg-[#f3f2f1]">{isAdding ? <Lucide.X size={18}/> : <Lucide.Plus size={18}/>} <span className="hidden md:inline">New Task</span><span className="md:hidden">Add</span></button>
                     </header>
                     {isAdding && (
-                        <form onSubmit={handleAdd} className="bg-white p-4 rounded border border-[#0078d4] shadow-sm flex flex-col md:flex-row gap-3">
-                            <input type="text" placeholder="Task Description" className="flex-1 px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus />
-                            <input type="text" placeholder="Assign To (Name)" className="md:w-48 px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value)} />
-                            <button className="bg-[#107c10] text-white px-6 py-2 rounded hover:bg-[#0b5a0b] font-semibold">Add</button>
+                        <form onSubmit={handleAdd} className="bg-white p-6 rounded border border-[#0078d4] shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
+                            <div className="md:col-span-4"><input type="text" placeholder="Task Title" className="w-full px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus required /></div>
+                            <div className="md:col-span-4"><textarea placeholder="Detailed Description..." className="w-full px-4 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4] h-20 resize-none" value={newTaskDesc} onChange={e => setNewTaskDesc(e.target.value)} /></div>
+                            <div><label className="text-xs text-[#605e5c] font-semibold">Assignee</label><input type="text" placeholder="Name" className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value)} /></div>
+                            <div>
+                                <label className="text-xs text-[#605e5c] font-semibold">Priority</label>
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value)}>
+                                    <option>Critical</option><option>Urgent</option><option>High</option><option>Medium</option><option>Low</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-[#605e5c] font-semibold">Level</label>
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={newTaskLevel} onChange={e => setNewTaskLevel(e.target.value)}>
+                                    <option>Strategic</option><option>Important</option><option>Operational</option><option>Routine</option><option>Personal</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="flex-1"><label className="text-xs text-[#605e5c] font-semibold">Due</label><input type="date" className="w-full px-2 py-2 border border-[#8a8886] rounded text-sm focus:ring-2 focus:ring-[#0078d4]" value={newTaskDueDate} onChange={e => setNewTaskDueDate(e.target.value)} /></div>
+                                <div className="flex items-end"><button className="bg-[#107c10] text-white px-4 py-2 rounded hover:bg-[#0b5a0b] font-semibold w-full h-[38px]">Create</button></div>
+                            </div>
                         </form>
                     )}
                     <div className="flex-1 overflow-x-auto pb-2">
-                        <div className="flex gap-4 min-w-[800px] h-full">
+                        <div className="flex gap-4 min-w-[900px] h-full">
                             {columns.map(col => (
                                 <div key={col.id} className={`flex-1 rounded p-4 flex flex-col gap-3 ${col.color} border border-[#edebe9]`}>
-                                    <h3 className="font-semibold text-[#323130] border-b border-[#edebe9] pb-2">{col.label}</h3>
+                                    <div className="flex justify-between items-center border-b border-[#edebe9] pb-2">
+                                        <h3 className="font-semibold text-[#323130]">{col.label}</h3>
+                                        <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-[#605e5c] border border-[#edebe9]">{tasks.filter(t => t.status === col.id).length}</span>
+                                    </div>
                                     <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                                         {tasks.filter(t => t.status === col.id).map(task => (
-                                            <div key={task.id} className="bg-white p-3 rounded shadow-sm border border-[#edebe9] group hover:border-[#c8c6c4] transition-all">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <p className="font-semibold text-sm text-[#323130]">{task.title}</p>
-                                                    {(user.role === 'Admin' || task.createdBy === user.name) && (
-                                                        <button onClick={() => onDeleteTask(task.id)} className="text-[#a19f9d] hover:text-[#a4262c] opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={14}/></button>
-                                                    )}
+                                            <div key={task.id} className="bg-white p-3 rounded shadow-sm border border-[#edebe9] group hover:border-[#0078d4] transition-all">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(task.priority || 'Medium')}`}>{task.priority || 'Medium'}</span>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)} className="text-[#605e5c] hover:text-[#0078d4]"><Lucide.Maximize2 size={14}/></button>
+                                                        {(user.role === 'Admin' || task.createdBy === user.name) && (
+                                                            <button onClick={() => onDeleteTask(task.id)} className="text-[#a19f9d] hover:text-[#a4262c] opacity-0 group-hover:opacity-100 transition-opacity"><Lucide.Trash2 size={14}/></button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between items-end mt-2">
-                                                    <div className="text-xs bg-[#f3f2f1] px-2 py-1 rounded text-[#605e5c] flex items-center gap-1"><Lucide.User size={10}/> {task.assignee}</div>
+                                                
+                                                <p className="font-semibold text-sm text-[#323130] mb-2 leading-tight">{task.title}</p>
+                                                
+                                                {expandedTask === task.id && (
+                                                    <div className="mb-3 animate-fade-in border-t border-[#edebe9] pt-2 mt-2">
+                                                        {task.description && <p className="text-xs text-[#605e5c] mb-3 whitespace-pre-wrap">{task.description}</p>}
+                                                        <div className="grid grid-cols-2 gap-2 text-xs text-[#605e5c] mb-3">
+                                                            <div><span className="font-semibold">Level:</span> {task.taskLevel || 'Operational'}</div>
+                                                            <div><span className="font-semibold">Due:</span> {task.dueDate || 'No Date'}</div>
+                                                        </div>
+                                                        
+                                                        {/* Subtasks Section */}
+                                                        <div className="mb-3">
+                                                            <p className="text-[10px] font-bold uppercase text-[#605e5c] mb-1">Subtasks</p>
+                                                            <div className="space-y-1 mb-2 max-h-[100px] overflow-y-auto">
+                                                                {(task.subtasks || []).map((st, i) => (
+                                                                    <div key={i} className="flex items-center gap-2 text-xs">
+                                                                        <input type="checkbox" checked={st.completed} onChange={() => toggleSubtask(task.id, i)} className="cursor-pointer" />
+                                                                        <span className={st.completed ? 'line-through text-[#a19f9d]' : 'text-[#323130]'}>{st.title}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <input type="text" onKeyDown={(e)=>addSubtask(e, task.id)} placeholder="+ Add subtask (press Enter)" className="w-full text-xs border-b border-[#edebe9] focus:border-[#0078d4] outline-none py-1 bg-transparent" />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="mb-3">
+                                                    <div className="flex justify-between text-[10px] font-bold text-[#605e5c] mb-1">
+                                                        <span>PROGRESS</span><span>{task.progress || 0}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-[#f3f2f1] rounded-full h-1.5 flex items-center relative group/slider">
+                                                        <div className="bg-[#0078d4] h-1.5 rounded-full pointer-events-none absolute left-0" style={{width: `${task.progress || 0}%`}}></div>
+                                                        <input 
+                                                            type="range" min="0" max="100" step="5" value={task.progress || 0}
+                                                            onChange={(e) => handleProgressChange(task.id, e.target.value)}
+                                                            className="absolute w-full h-full opacity-0 cursor-pointer"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-between items-end mt-2 pt-2 border-t border-[#edebe9]">
+                                                    <div className="text-[10px] font-bold uppercase bg-[#f3f2f1] px-1.5 py-0.5 rounded text-[#605e5c] flex items-center gap-1"><Lucide.User size={10}/> {task.assignee}</div>
                                                     
                                                     {col.id !== 'done' && (
-                                                        <button onClick={() => handleStatusChange(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-xs text-[#0078d4] hover:underline font-semibold">Next &rarr;</button>
+                                                        <button onClick={() => handleStatusChange(task.id, col.id === 'todo' ? 'in_progress' : 'done')} className="text-[10px] uppercase font-bold text-[#0078d4] hover:underline">Next &rarr;</button>
                                                     )}
-                                                    
-                                                    {/* Admin Override for status */}
                                                     {user.role === 'Admin' && col.id === 'done' && (
-                                                        <span className="text-xs text-[#107c10] font-semibold flex items-center gap-1"><Lucide.Check size={10}/> Done</span>
+                                                        <span className="text-[10px] uppercase font-bold text-[#107c10] flex items-center gap-1"><Lucide.Check size={10}/> Complete</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -841,18 +1064,30 @@
             );
         };
 
-        const ChatModule = ({ user, messages, onSendMessage }) => {
+        const ChatModule = ({ user, allUsers, messages, onSendMessage }) => {
             const [text, setText] = useState('');
             const [isUploading, setIsUploading] = useState(false);
+            const [activeChat, setActiveChat] = useState('group'); // 'group' | userId
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+            
             const fileInputRef = useRef(null);
             const bottomRef = useRef(null);
             
-            useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+            // Auto-scroll when active chat messages change
+            useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "auto" }); }, [messages, activeChat]);
 
             const handleSend = (e) => {
                 e.preventDefault();
                 if(!text.trim()) return;
-                onSendMessage({ text, type: 'text', userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
+                onSendMessage({ 
+                    text, 
+                    type: 'text', 
+                    userId: user.uid, 
+                    userName: user.name, 
+                    userPhoto: user.photoURL || '', 
+                    recipientId: activeChat === 'group' ? null : activeChat,
+                    timestamp: serverTimestamp() 
+                });
                 setText('');
             };
 
@@ -864,47 +1099,126 @@
                 setIsUploading(true);
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    onSendMessage({ text: 'Shared a PDF file', type: 'pdf', fileName: file.name, fileData: reader.result, userId: user.uid, userName: user.name, userPhoto: user.photoURL || '', timestamp: serverTimestamp() });
+                    onSendMessage({ 
+                        text: 'Shared a PDF file', 
+                        type: 'pdf', 
+                        fileName: file.name, 
+                        fileData: reader.result, 
+                        userId: user.uid, 
+                        userName: user.name, 
+                        userPhoto: user.photoURL || '',
+                        recipientId: activeChat === 'group' ? null : activeChat,
+                        timestamp: serverTimestamp() 
+                    });
                     setIsUploading(false); e.target.value = null;
                 };
                 reader.readAsDataURL(file);
             };
 
+            const switchChat = (id) => {
+                setActiveChat(id);
+                setSidebarOpen(false); // Auto close sidebar on mobile
+            };
+
+            // Filter messages securely for current chat context
+            const activeMessages = messages.filter(m => {
+                if (activeChat === 'group') return !m.recipientId;
+                return (m.userId === user.uid && m.recipientId === activeChat) || (m.userId === activeChat && m.recipientId === user.uid);
+            });
+
+            // Get target user details if in private chat
+            const activeUser = activeChat !== 'group' ? allUsers.find(u => u.id === activeChat) : null;
+            const otherUsers = allUsers.filter(u => u.id !== user.uid);
+
             return (
-                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden animate-fade-in">
-                    <div className="p-4 bg-white border-b border-[#edebe9] font-semibold text-[#323130] flex items-center gap-2 shadow-sm z-10">
-                        <Lucide.MessageSquare size={18} className="text-[#0078d4]"/> Group Chat
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f8]">
-                        {messages.map(m => (
-                            <div key={m.id} className={`flex gap-2 ${m.userId === user.uid ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className="w-8 h-8 rounded-full bg-white border border-[#edebe9] flex-shrink-0 overflow-hidden shadow-sm">
-                                     {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-[#605e5c]">{m.userName.charAt(0)}</div>}
-                                </div>
-                                <div className={`max-w-[75%] p-3 rounded text-sm shadow-sm ${m.userId === user.uid ? 'bg-[#0078d4] text-white rounded-tr-none' : 'bg-white border border-[#edebe9] text-[#323130] rounded-tl-none'}`}>
-                                    <p className="font-semibold text-xs opacity-80 mb-1">{m.userName}</p>
-                                    {m.type === 'pdf' ? (
-                                        <div className="flex items-center gap-2 bg-black/10 p-2 rounded">
-                                            <Lucide.FileText size={24} className="flex-shrink-0" />
-                                            <div className="overflow-hidden">
-                                                <p className="truncate font-semibold">{m.fileName}</p>
-                                                <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-semibold mt-1 inline-block">Download PDF</a>
-                                            </div>
-                                        </div>
-                                    ) : (<p>{m.text}</p>)}
-                                </div>
+                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden animate-fade-in relative">
+                    
+                    {/* Chat Sidebar (Groups & DMs) */}
+                    <div className={`w-full md:w-72 flex-shrink-0 border-r border-[#edebe9] bg-[#faf9f8] flex flex-col transition-transform ${sidebarOpen ? 'absolute md:static z-20 h-full transform-none' : 'hidden md:flex'}`}>
+                        <div className="p-4 border-b border-[#edebe9] bg-white">
+                            <h3 className="font-semibold text-[#323130] flex items-center gap-2"><Lucide.MessageSquare size={18}/> Messages</h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="p-3">
+                                <p className="text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 px-2">Channels</p>
+                                <button 
+                                    onClick={() => switchChat('group')} 
+                                    className={`w-full flex items-center gap-3 p-2 rounded transition-colors ${activeChat === 'group' ? 'bg-[#eff6fc] text-[#0078d4] font-semibold' : 'text-[#323130] hover:bg-[#edebe9]'}`}
+                                >
+                                    <div className="w-8 h-8 rounded bg-[#0078d4] text-white flex items-center justify-center flex-shrink-0"><Lucide.Users size={16}/></div>
+                                    <span>Team Group Chat</span>
+                                </button>
                             </div>
-                        ))}
-                        <div ref={bottomRef} />
+                            
+                            <div className="p-3 pt-0">
+                                <p className="text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 px-2 mt-4">Direct Messages</p>
+                                {otherUsers.map(u => (
+                                    <button 
+                                        key={u.id}
+                                        onClick={() => switchChat(u.id)}
+                                        className={`w-full flex items-center gap-3 p-2 rounded transition-colors ${activeChat === u.id ? 'bg-[#eff6fc] text-[#0078d4] font-semibold' : 'text-[#323130] hover:bg-[#edebe9]'}`}
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-[#e1dfdd] text-[#323130] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-bold border border-[#c8c6c4]">
+                                            {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover"/> : u.name.charAt(0)}
+                                        </div>
+                                        <span className="truncate flex-1 text-left">{u.name}</span>
+                                    </button>
+                                ))}
+                                {otherUsers.length === 0 && <p className="text-xs text-[#605e5c] px-2">No other users found.</p>}
+                            </div>
+                        </div>
                     </div>
-                    <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-[#edebe9] bg-white flex gap-2 items-center">
-                        <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
-                        <button type="button" onClick={() => fileInputRef.current.click()} className="text-[#605e5c] hover:text-[#0078d4] p-2 rounded transition-colors bg-[#f3f2f1]" disabled={isUploading}>
-                            {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
-                        </button>
-                        <input type="text" className="flex-1 bg-white border border-[#8a8886] rounded px-4 py-2 text-base md:text-sm focus:ring-2 focus:ring-[#0078d4] outline-none" placeholder="Type a message..." value={text} onChange={e => setText(e.target.value)} />
-                        <button className="bg-[#0078d4] text-white p-2 rounded hover:bg-[#106ebe] flex-shrink-0 shadow-sm"><Lucide.Send size={18}/></button>
-                    </form>
+
+                    {/* Chat Area */}
+                    <div className="flex-1 flex flex-col min-w-0 bg-white z-10 w-full">
+                        {/* Header */}
+                        <div className="p-4 bg-white border-b border-[#edebe9] font-semibold text-[#323130] flex items-center gap-3 shadow-sm z-10">
+                            <button onClick={() => setSidebarOpen(true)} className="md:hidden text-[#605e5c] hover:bg-[#f3f2f1] p-1 rounded"><Lucide.ArrowLeft size={20}/></button>
+                            {activeChat === 'group' ? (
+                                <><Lucide.Users size={20} className="text-[#0078d4]"/> Team Group Chat</>
+                            ) : (
+                                activeUser && <><div className="w-8 h-8 rounded-full bg-[#f3f2f1] flex items-center justify-center text-[#605e5c] border border-[#edebe9] text-xs">{activeUser.name.charAt(0)}</div> {activeUser.name}</>
+                            )}
+                        </div>
+                        
+                        {/* Messages Container */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f8] custom-scrollbar">
+                            {activeMessages.map(m => (
+                                <div key={m.id} className={`flex gap-2 ${m.userId === user.uid ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    <div className="w-8 h-8 rounded-full bg-white border border-[#edebe9] flex-shrink-0 overflow-hidden shadow-sm">
+                                         {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-[#605e5c]">{m.userName.charAt(0)}</div>}
+                                    </div>
+                                    <div className={`max-w-[75%] p-3 rounded text-sm shadow-sm ${m.userId === user.uid ? 'bg-[#0078d4] text-white rounded-tr-none' : 'bg-white border border-[#edebe9] text-[#323130] rounded-tl-none'}`}>
+                                        <div className="flex justify-between items-baseline gap-4 mb-1">
+                                            <p className="font-semibold text-xs opacity-90">{m.userName}</p>
+                                            <span className="text-[10px] opacity-70">{m.timestamp?.toDate ? m.timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
+                                        </div>
+                                        {m.type === 'pdf' ? (
+                                            <div className="flex items-center gap-2 bg-black/10 p-2 rounded mt-1">
+                                                <Lucide.FileText size={24} className="flex-shrink-0" />
+                                                <div className="overflow-hidden">
+                                                    <p className="truncate font-semibold">{m.fileName}</p>
+                                                    <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-semibold mt-1 inline-block">Download PDF</a>
+                                                </div>
+                                            </div>
+                                        ) : (<p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>)}
+                                    </div>
+                                </div>
+                            ))}
+                            {activeMessages.length === 0 && <div className="text-center py-10 text-[#a19f9d] text-sm">No messages yet. Start the conversation!</div>}
+                            <div ref={bottomRef} className="h-1" />
+                        </div>
+                        
+                        {/* Input Form */}
+                        <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-[#edebe9] bg-white flex gap-2 items-center">
+                            <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                            <button type="button" onClick={() => fileInputRef.current.click()} className="text-[#605e5c] hover:text-[#0078d4] p-2 rounded transition-colors bg-[#f3f2f1]" disabled={isUploading}>
+                                {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
+                            </button>
+                            <input type="text" className="flex-1 bg-white border border-[#8a8886] rounded px-4 py-2 text-base md:text-sm focus:ring-2 focus:ring-[#0078d4] outline-none" placeholder={activeChat === 'group' ? "Message team..." : "Type a private message..."} value={text} onChange={e => setText(e.target.value)} />
+                            <button className="bg-[#0078d4] text-white p-2 rounded hover:bg-[#106ebe] flex-shrink-0 shadow-sm"><Lucide.Send size={18}/></button>
+                        </form>
+                    </div>
                 </div>
             );
         };
@@ -992,8 +1306,6 @@
                 </div>
             );
         };
-
-        // --- ADVANCED MODULES ---
 
         const MeetingsModule = ({ user, meetings, onScheduleMeeting, onDeleteMeeting }) => {
             const [title, setTitle] = useState('');
@@ -1477,7 +1789,6 @@
             );
         };
 
-        // NEW ADVANCED FEATURE: CRM MODULE
         const CRMModule = ({ user, clients, onAddClient, onUpdateClient, onDeleteClient }) => {
             const [name, setName] = useState('');
             const [company, setCompany] = useState('');
@@ -1578,6 +1889,172 @@
             );
         };
 
+        const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
+            const [newName, setNewName] = useState('');
+            const [newEmail, setNewEmail] = useState('');
+            const [newRole, setNewRole] = useState('Employee');
+            const [newLocation, setNewLocation] = useState('Delhi Unit');
+            const [newPhoto, setNewPhoto] = useState('');
+            const [isAdding, setIsAdding] = useState(false);
+
+            const handleAdd = (e) => {
+                e.preventDefault();
+                if (!newEmail || !newName) return;
+                if (allUsers.some(u => u.email === newEmail)) { alert("User already exists!"); return; }
+                onAddUser({ name: newName, email: newEmail.toLowerCase().trim(), role: newRole, location: newLocation, photoURL: newPhoto, createdAt: serverTimestamp() });
+                setNewName(''); setNewEmail(''); setNewPhoto(''); setIsAdding(false);
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                        <h2 className="text-2xl font-semibold text-[#323130]">User Management</h2>
+                        <button onClick={() => setIsAdding(!isAdding)} className="bg-white border border-[#edebe9] text-[#323130] px-4 py-2 rounded flex items-center gap-2 hover:bg-[#f3f2f1] transition-colors self-start md:self-auto shadow-sm">
+                            {isAdding ? <Lucide.X size={18} /> : <Lucide.UserPlus size={18} />} {isAdding ? 'Cancel' : 'Add User'}
+                        </button>
+                    </header>
+                    {isAdding && (
+                        <div className="bg-white p-6 rounded border border-[#0078d4] shadow-sm animate-fade-in">
+                            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="text" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full Name" />
+                                <input type="email" required className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newRole} onChange={e => setNewRole(e.target.value)}><option>Employee</option><option>Manager</option><option>Director</option><option>Business Partner</option></select>
+                                <select className="w-full px-3 py-2 border border-[#8a8886] rounded bg-white text-base focus:ring-2 focus:ring-[#0078d4]" value={newLocation} onChange={e => setNewLocation(e.target.value)}><option>Delhi Unit</option><option>Mumbai HQ</option><option>Bangalore Hub</option><option>Remote</option></select>
+                                <div className="md:col-span-2"><input type="text" className="w-full px-3 py-2 border border-[#8a8886] rounded text-base focus:ring-2 focus:ring-[#0078d4]" value={newPhoto} onChange={e => setNewPhoto(e.target.value)} placeholder="Profile Photo URL (Optional)" /></div>
+                                <button className="md:col-span-2 w-full bg-[#107c10] hover:bg-[#0b5a0b] text-white py-2 rounded font-semibold mt-2 shadow-sm">Confirm Registration</button>
+                            </form>
+                        </div>
+                    )}
+                    <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left min-w-[600px]">
+                                <thead className="bg-[#f3f2f1] text-[#323130] uppercase text-xs font-semibold"><tr><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Role</th><th className="px-6 py-3">Email</th><th className="px-6 py-3 text-right">Actions</th></tr></thead>
+                                <tbody className="divide-y divide-[#edebe9]">
+                                    {allUsers.map(user => (
+                                        <tr key={user.id} className="hover:bg-[#faf9f8] transition-colors">
+                                            <td className="px-6 py-4 flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-[#f3f2f1] border border-[#edebe9] flex items-center justify-center overflow-hidden flex-shrink-0">{user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-xs font-semibold text-[#605e5c]">{user.name.charAt(0)}</span>}</div><span className="font-semibold text-[#323130]">{user.name}</span></td>
+                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-semibold border border-[#edebe9] bg-[#f3f2f1] text-[#323130] whitespace-nowrap">{user.role}</span></td>
+                                            <td className="px-6 py-4 text-[#605e5c]">{user.email}</td>
+                                            <td className="px-6 py-4 text-right">{user.email !== MASTER_ADMIN_EMAIL && <button onClick={() => {if(confirm('Delete user?')) onDeleteUser(user.id)}} className="text-[#a4262c] hover:underline font-semibold">Remove</button>}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const HelpDeskModule = ({ user, tickets, onRaiseTicket, onUpdateStatus }) => {
+            const [subject, setSubject] = useState('');
+            const [category, setCategory] = useState('IT Support');
+            const [desc, setDesc] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(!subject) return;
+                onRaiseTicket({ subject, category, description: desc, status: 'Open', userId: user.uid, userName: user.name, timestamp: serverTimestamp() });
+                setSubject(''); setDesc('');
+            };
+
+            const myTickets = user.role === 'Admin' ? tickets : tickets.filter(t => t.userId === user.uid);
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header>
+                        <h2 className="text-2xl font-semibold text-[#323130]">Help Desk</h2>
+                    </header>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <h3 className="font-semibold text-[#323130] mb-4">Raise New Ticket</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <select className="w-full border border-[#8a8886] p-2 rounded text-base bg-white focus:ring-2 focus:ring-[#0078d4]" value={category} onChange={e=>setCategory(e.target.value)}>
+                                    <option>IT Support</option><option>HR Query</option><option>Facility/Maintenance</option><option>Accounts</option>
+                                </select>
+                                <input type="text" className="w-full border border-[#8a8886] p-2 rounded text-base focus:ring-2 focus:ring-[#0078d4]" placeholder="Subject" value={subject} onChange={e=>setSubject(e.target.value)} required />
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded text-base h-32 resize-none focus:ring-2 focus:ring-[#0078d4]" placeholder="Describe the issue..." value={desc} onChange={e=>setDesc(e.target.value)} required></textarea>
+                                <button className="w-full bg-[#0078d4] text-white py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Submit Ticket</button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 space-y-4">
+                            {myTickets.map(ticket => (
+                                <div key={ticket.id} className="bg-white p-5 rounded shadow-sm border border-[#edebe9]">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#f3f2f1] text-[#605e5c]">{ticket.category}</span>
+                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${ticket.status==='Open'?'bg-[#dff6dd] text-[#107c10]': ticket.status==='Resolved' ? 'bg-[#eff6fc] text-[#0078d4]' : 'bg-[#f3f2f1] text-[#605e5c]'}`}>{ticket.status}</span>
+                                            </div>
+                                            <h4 className="font-semibold text-[#323130]">{ticket.subject}</h4>
+                                            <p className="text-sm text-[#605e5c] mt-1">{ticket.description}</p>
+                                            {user.role === 'Admin' && <p className="text-xs text-[#0078d4] mt-1 font-semibold">Raised by: {ticket.userName}</p>}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-[#605e5c] mb-2">{new Date(ticket.timestamp?.toDate ? ticket.timestamp.toDate() : Date.now()).toLocaleDateString()}</p>
+                                            {user.role === 'Admin' && (
+                                                <select 
+                                                    className="text-xs border border-[#8a8886] p-1 rounded bg-white text-[#323130]"
+                                                    value={ticket.status}
+                                                    onChange={(e) => onUpdateStatus(ticket.id, e.target.value)}
+                                                >
+                                                    <option value="Open">Open</option>
+                                                    <option value="In Progress">In Progress</option>
+                                                    <option value="Resolved">Resolved</option>
+                                                </select>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {myTickets.length === 0 && <div className="text-center py-10 text-[#605e5c] bg-white rounded border border-dashed border-[#edebe9]">No active tickets.</div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const NoticesModule = ({ user, announcements, onPostNotice, onDeleteNotice }) => {
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+            const [type, setType] = useState('General');
+
+            const handlePost = (e) => {
+                e.preventDefault();
+                onPostNotice({ title, content, type, author: user.name, timestamp: serverTimestamp() });
+                setTitle(''); setContent('');
+            };
+
+            return (
+                <div className="space-y-6 pb-20 animate-fade-in">
+                    <header><h2 className="text-2xl font-semibold text-[#323130]">Notice Board</h2></header>
+                    {user.role === 'Admin' && (
+                        <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
+                            <form onSubmit={handlePost} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <input type="text" className="col-span-2 border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Notice Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                                    <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" value={type} onChange={e=>setType(e.target.value)}><option>General</option><option>Urgent</option><option>Event</option><option>Holiday</option></select>
+                                </div>
+                                <textarea className="w-full border border-[#8a8886] p-2 rounded h-24 focus:ring-2 focus:ring-[#0078d4]" placeholder="Content..." value={content} onChange={e=>setContent(e.target.value)} required></textarea>
+                                <button className="bg-[#0078d4] hover:bg-[#106ebe] text-white px-6 py-2 rounded shadow-sm font-semibold">Post Notice</button>
+                            </form>
+                        </div>
+                    )}
+                    <div className="space-y-4">
+                        {announcements.map(ann => (
+                            <div key={ann.id} className="bg-white p-4 rounded border border-[#edebe9] flex justify-between items-start shadow-sm">
+                                <div>
+                                    <h4 className="font-semibold text-[#323130]">{ann.title} <span className="text-xs bg-[#f3f2f1] px-2 rounded ml-2 font-normal">{ann.type}</span></h4>
+                                    <p className="text-sm text-[#605e5c] mt-1">{ann.content}</p>
+                                </div>
+                                {user.role === 'Admin' && <button onClick={()=>onDeleteNotice(ann.id)} className="text-[#a4262c] text-xs hover:underline font-semibold">Delete</button>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             if (!isConfigured) return <ConfigErrorScreen />;
 
@@ -1672,12 +2149,8 @@
                 const unsub15 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'trainings'), orderBy('timestamp', 'desc')), s => setTrainings(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub16 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'clients'), orderBy('timestamp', 'desc')), s => setClients(s.docs.map(d => ({id: d.id, ...d.data()}))));
 
-                let unsub6 = () => {};
-                if (profile.role === 'Admin') {
-                    unsub6 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), s => setAllUsers(s.docs.map(d => ({id: d.id, ...d.data()}))));
-                } else {
-                    setAllUsers([]);
-                }
+                // Fetch All Users globally for the Individual Chat System
+                const unsub6 = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), s => setAllUsers(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 
                 return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10(); unsub11(); unsub12(); unsub13(); unsub14(); unsub15(); unsub16(); };
             }, [user, profile]);
@@ -1768,10 +2241,10 @@
                                 {activeTab === 'tasks' && <TaskBoard user={{...profile, uid: user.uid}} tasks={tasks} onAddTask={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), data)} onUpdateTaskStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id), status)} onDeleteTask={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id))} />}
                                 {activeTab === 'leaves' && <AvailabilityModule user={{...profile, uid: user.uid}} leaves={leaves} onAddLeave={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), data)} />}
                                 {activeTab === 'eod' && <EODModule user={{...profile, uid: user.uid}} reports={reports} onSubmitReport={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), data)} />}
-                                {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} messages={messages} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
+                                {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} allUsers={allUsers} messages={messages} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
                                 {activeTab === 'progress' && <ProgressModule user={{...profile, uid: user.uid}} tasks={tasks} attendanceLogs={attendanceLogs} reports={reports} />}
                                 {activeTab === 'ideas' && <IdeaHubModule user={{...profile, uid: user.uid}} ideas={ideas} onSubmitIdea={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), data)} />}
-                                {activeTab === 'payroll' && <PayrollModule user={{...profile, uid: user.uid}} />}
+                                {activeTab === 'payroll' && <PayrollModule user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} leaves={leaves} />}
                                 {activeTab === 'helpdesk' && <HelpDeskModule user={{...profile, uid: user.uid}} tickets={tickets} onRaiseTicket={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), data)} onUpdateStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tickets', id), {status})} />}
                                 {activeTab === 'notices' && <NoticesModule user={{...profile, uid: user.uid}} announcements={announcements} onPostNotice={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), data)} onDeleteNotice={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'notices', id))} />}
                                 
