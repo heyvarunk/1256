@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "67016520294",
+    "project_id": "varun-dynamics-app",
+    "storage_bucket": "varun-dynamics-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:67016520294:android:617f9a11583567d4cf73a7",
+        "android_client_info": {
+          "package_name": "com.varundynamics.erp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjYMMSAWv-HIMxk7heOJkqMlqWqsK4wO4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
