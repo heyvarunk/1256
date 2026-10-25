@@ -1984,32 +1984,71 @@
         };
 
 
-        // Quiet, automatic registration only when the browser has ALREADY granted permission.
-        // Browser security prohibits granting notification permission silently.
+        // Native permission is requested only from a deliberate user tap.
+        // When already granted, FCM registration runs automatically on sign-in.
         const PushSetup = ({ user }) => {
-            useEffect(() => {
-                if (!user?.uid || !window.isSecureContext || !('Notification' in window) ||
-                    Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return;
-                let cancelled = false;
-                (async () => {
-                    try {
-                        if (!await isSupported() || cancelled) return;
-                        const workerUrl = new URL('./firebase-messaging-sw.js', window.location.href);
-                        const response = await fetch(workerUrl.href, {cache:'no-store'});
-                        if (!response.ok) { console.warn('VDS push worker unavailable:', response.status, workerUrl.href); return; }
-                        const registration = await navigator.serviceWorker.register(workerUrl.href, {scope:'./'});
-                        const token = await getToken(getMessaging(app), {
-                            vapidKey:window.VDS_PUSH_VAPID_KEY, serviceWorkerRegistration:registration
-                        });
-                        if (!token || cancelled) return;
-                        await setDoc(doc(db,'pushSubscriptions',user.uid,'devices',token.slice(0,32)), {
-                            token,uid:user.uid,email:user.email||'',updatedAt:serverTimestamp(),userAgent:navigator.userAgent
-                        }, {merge:true});
-                    } catch (err) { console.warn('VDS background push registration:',err); }
-                })();
-                return () => {cancelled=true;};
-            }, [user?.uid]);
-            return null;
+            const [permission,setPermission]=useState(() => 'Notification' in window ? Notification.permission : 'unsupported');
+            const [state,setState]=useState('idle');
+            const [error,setError]=useState('');
+            const register=async()=>{
+                if(!user?.uid || !window.isSecureContext || !('serviceWorker' in navigator)) throw Error('Secure HTTPS and service workers are required.');
+                if(!await isSupported()) throw Error('Firebase Messaging is not supported on this browser.');
+                const workerUrl=new URL('./firebase-messaging-sw.js',location.href);
+                const response=await fetch(workerUrl.href,{cache:'no-store'});
+                if(!response.ok) throw Error('Push service worker is not published on GitHub Pages (HTTP '+response.status+').');
+                const registration=await navigator.serviceWorker.register(workerUrl.href,{scope:'./'});
+                const token=await getToken(getMessaging(app),{vapidKey:window.VDS_PUSH_VAPID_KEY,serviceWorkerRegistration:registration});
+                if(!token)throw Error('Firebase did not provide a push token.');
+                await setDoc(doc(db,'pushSubscriptions',user.uid,'devices',token.slice(0,32)),{
+                    token,uid:user.uid,email:user.email||'',updatedAt:serverTimestamp(),userAgent:navigator.userAgent
+                },{merge:true});
+                setState('ready');setError('');
+            };
+            // Android native APK: FirebaseMessaging token comes from Android, not Web Push.
+            useEffect(()=>{
+                if(!user?.uid || !window.VDSAndroidPush)return;
+                let active=true;
+                const saveNativeToken=async token=>{
+                    if(!active || !token || typeof token!=='string')return;
+                    try{
+                        await setDoc(doc(db,'pushSubscriptions',user.uid,'devices','android_'+token.slice(0,32)),{
+                            token,uid:user.uid,email:user.email||'',platform:'android-native',
+                            updatedAt:serverTimestamp(),userAgent:navigator.userAgent
+                        },{merge:true});
+                        setState('ready');setError('');
+                    }catch(err){console.warn('Android push token registration failed',err);}
+                };
+                window.VDSReceiveNativeToken=saveNativeToken;
+                try{window.VDSAndroidPush.requestToken();}catch(err){console.warn('Android token request',err);}
+                return()=>{active=false;if(window.VDSReceiveNativeToken===saveNativeToken)delete window.VDSReceiveNativeToken;};
+            },[user?.uid]);
+            useEffect(()=>{
+                if(!user?.uid||permission!=='granted')return;
+                let cancelled=false;
+                register().catch(err=>{if(!cancelled){setState('error');setError(err.message);console.warn('Push registration',err);}});
+                return()=>{cancelled=true;};
+            },[user?.uid,permission]);
+            const enable=async()=>{
+                setState('loading');setError('');
+                try{
+                    if(!('Notification' in window))throw Error('This device does not support browser notifications.');
+                    // A browser-owned permission prompt may appear once; it cannot be bypassed.
+                    const result=await Notification.requestPermission();
+                    setPermission(result);
+                    if(result==='granted')await register();
+                    else {setState('denied');setError('Notifications are disabled in browser or device settings.');}
+                }catch(err){setState('error');setError(err.message);}
+            };
+            // A compact first-use invitation, not a test or troubleshooting panel.
+            if(window.VDSAndroidPush || !user?.uid || (permission==='granted' && state!=='error') || permission==='unsupported')return null;
+            if(permission==='denied')return null; // respect prior denial; never nag
+            return <div className="mb-3 bg-[#eff6fc] border border-[#c7e0f4] rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0"><p className="font-semibold text-sm">Get message and task notifications</p>
+                    <p className="text-xs text-[#605e5c]">Receive alerts on this device, including when the ERP is closed.</p>
+                    {error&&<p className="text-xs text-[#a4262c] mt-1">{error}</p>}
+                </div>
+                <button type="button" disabled={state==='loading'} onClick={enable} className="bg-[#0078d4] text-white rounded px-4 py-2 text-sm disabled:opacity-50">{state==='loading'?'Enabling…':'Enable notifications'}</button>
+            </div>;
         };
 
         const App = () => {
@@ -2349,7 +2388,7 @@
                             <div className="max-w-6xl mx-auto h-full">
                                 <PushSetup user={user} profile={profile}/>
                                 {liveAlert&&<div role="alert" aria-live="assertive" className="fixed top-4 right-4 left-4 md:left-auto md:w-[420px] z-[9999] bg-[#eaf4ff] border-2 border-[#0078d4] shadow-2xl p-4 rounded-xl flex justify-between gap-3"><div><strong className="block text-[#005a9e]">{liveAlert.title}</strong><p className="text-sm break-words mt-1">{liveAlert.body}</p></div><button aria-label="Dismiss alert" onClick={()=>setLiveAlert(null)} className="font-bold text-lg">×</button></div>}
-                                <div className="flex justify-end mb-3 gap-2"><button type="button" onClick={()=>showIncomingAlert('Notification test','If you see this banner, in-app alerts are working. Sound requires a browser interaction and device volume.')} className="bg-white border rounded px-3 py-2 text-sm">Test sound & banner</button><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
+                                <div className="flex justify-end mb-3 gap-2"><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
                                 {activeTab === 'notifications' && <ActivityCenter items={recentActivities} seen={notificationSeen} onRead={markNotification} onReadAll={markAll} onNavigate={setActiveTab}/>}
                                 {activeTab === 'it-admin' && profile.email === MASTER_ADMIN_EMAIL && <AdminITConsole tickets={tickets} tasks={tasks} notices={announcements}
                                     onUpdateTicket={(id,d)=>adminAction('ticket_update','IT ticket updated',()=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id),d))}
