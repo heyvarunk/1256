@@ -1993,20 +1993,26 @@
                 if(!('Notification' in window))return setStatus('This browser does not support system notifications. In-app alerts still work.');
                 if(Notification.permission==='denied')return setStatus('Notifications are BLOCKED for this website. Open the browser site settings, change Notifications to Allow, then reload. The ERP cannot override this setting.');
                 if(Notification.permission==='granted')return setStatus('Permission allowed. Enable on this device to register Firebase push delivery.');
-                setStatus('Permission not granted yet. Tap Enable to see the browser permission prompt.');
+                setStatus('Tap Enable on this device to show the browser notification permission popup.');
             };
             useEffect(()=>{check();const onFocus=()=>check();window.addEventListener('focus',onFocus);return()=>window.removeEventListener('focus',onFocus);},[]);
             const enable=async()=>{
                 setBusy(true);
                 try{
-                    if(!window.isSecureContext)throw Error('HTTPS is required. Open your published GitHub Pages website.');
-                    if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('This browser does not support web push.');
-                    if(Notification.permission==='denied')throw Error('Browser blocked notifications. Open the padlock/site-settings menu, allow Notifications, then reload.');
-                    if(!await isSupported())throw Error('Firebase Messaging is unsupported here. On iPhone, install this website to the Home Screen and open that app.');
-                    const registration=await navigator.serviceWorker.register('./firebase-messaging-sw.js',{scope:'./'});
-                    await navigator.serviceWorker.ready;
+                    if(!window.isSecureContext)throw Error('Open the HTTPS GitHub Pages website to enable notifications.');
+                    if(!('Notification' in window))throw Error('System notifications are not supported in this browser.');
+                    if(Notification.permission==='denied')throw Error('Notifications are blocked for this website. Open Site settings → Notifications → Allow, then reload.');
+                    // Ask FIRST, directly from the button click: the browser can show its native popup.
                     const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
-                    if(permission!=='granted')throw Error('Permission was not granted. Use browser site settings to allow notifications.');
+                    if(permission!=='granted')throw Error('Notification permission was not allowed. Enable it in your browser site settings.');
+                    setStatus('Notifications allowed. Connecting Firebase push…');
+                    if(!('serviceWorker' in navigator))throw Error('This browser does not support background push.');
+                    if(!await isSupported())throw Error('Firebase Messaging is unsupported here. On iPhone, install this website to the Home Screen and open that app.');
+                    // This file MUST exist at the published GitHub Pages URL; a 404 cannot be fixed by JavaScript.
+                    const workerUrl=new URL('./firebase-messaging-sw.js',window.location.href);
+                    const response=await fetch(workerUrl.href,{cache:'no-store'});
+                    if(!response.ok)throw Error('Notification permission allowed, but firebase-messaging-sw.js is missing (HTTP '+response.status+'). Upload it beside index.html in the GitHub repository, then refresh.');
+                    const registration=await navigator.serviceWorker.register(workerUrl.href,{scope:'./'});
                     const token=await getToken(getMessaging(app),{vapidKey:window.VDS_PUSH_VAPID_KEY,serviceWorkerRegistration:registration});
                     if(!token)throw Error('Firebase did not return a push token. Check Cloud Messaging configuration.');
                     await setDoc(doc(db,'pushSubscriptions',user.uid,'devices',token.slice(0,32)),{
