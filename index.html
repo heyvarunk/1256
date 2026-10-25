@@ -75,7 +75,7 @@
     </style>
     <link rel="manifest" href="./manifest.webmanifest">
     <meta name="theme-color" content="#0078d4">
-    <script>window.VDS_PUSH_VAPID_KEY="REPLACE_WITH_FIREBASE_WEB_PUSH_VAPID_KEY";</script>
+    <script>window.VDS_PUSH_VAPID_KEY="BJzzVk0WXZgCV3IeIiQr_FgBpBlFEWcb8WhcjXhj3TQmpCMVvCOlt5hkXU8IajVHx6mh1i9vUzS_xNp-gefg9eo";</script>
 </head>
 <body class="bg-[#faf9f8] text-[#323130] font-sans selection:bg-[#c7e0f4]">
     <div id="root"></div>
@@ -168,7 +168,7 @@
                     const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
                     const user = userCredential.user;
 
-                    requestNotificationPermission();
+                    // Permission prompts must follow an explicit user action; never auto-request on login.
 
                     if (normalizedEmail === MASTER_ADMIN_EMAIL) {
                         const adminProfile = {
@@ -1984,43 +1984,62 @@
         };
 
 
-        const PushSetup = ({ user, profile }) => {
-            const [status,setStatus]=useState('Not enabled on this device');
+        const PushSetup = ({ user }) => {
+            const [status,setStatus]=useState('Checking notification status…');
+            const [busy,setBusy]=useState(false);
+            const [inApp,setInApp]=useState(null);
+            const check=()=>{
+                if(!window.isSecureContext)return setStatus('Open the published HTTPS GitHub Pages URL, not a downloaded HTML file.');
+                if(!('Notification' in window))return setStatus('This browser does not support system notifications. In-app alerts still work.');
+                if(Notification.permission==='denied')return setStatus('Notifications are BLOCKED for this website. Open the browser site settings, change Notifications to Allow, then reload. The ERP cannot override this setting.');
+                if(Notification.permission==='granted')return setStatus('Permission allowed. Enable on this device to register Firebase push delivery.');
+                setStatus('Permission not granted yet. Tap Enable to see the browser permission prompt.');
+            };
+            useEffect(()=>{check();const onFocus=()=>check();window.addEventListener('focus',onFocus);return()=>window.removeEventListener('focus',onFocus);},[]);
             const enable=async()=>{
-                try {
-                    if(!window.isSecureContext)throw Error('HTTPS is required.');
-                    if(!('serviceWorker' in navigator))throw Error('Service workers are unavailable.');
-                    if(!await isSupported())throw Error('Firebase messaging is not supported on this browser.');
-                    if(!window.VDS_PUSH_VAPID_KEY || window.VDS_PUSH_VAPID_KEY==='REPLACE_WITH_FIREBASE_WEB_PUSH_VAPID_KEY')throw Error('Configure the Firebase Web Push VAPID key first.');
-                    const permission=await Notification.requestPermission();
-                    if(permission!=='granted')throw Error('Notifications were not allowed.');
-                    const registration=await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-                    const messaging=getMessaging(app);
-                    const token=await getToken(messaging,{vapidKey:window.VDS_PUSH_VAPID_KEY,serviceWorkerRegistration:registration});
-                    if(!token)throw Error('No push token was issued.');
+                setBusy(true);
+                try{
+                    if(!window.isSecureContext)throw Error('HTTPS is required. Open your published GitHub Pages website.');
+                    if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('This browser does not support web push.');
+                    if(Notification.permission==='denied')throw Error('Browser blocked notifications. Open the padlock/site-settings menu, allow Notifications, then reload.');
+                    if(!await isSupported())throw Error('Firebase Messaging is unsupported here. On iPhone, install this website to the Home Screen and open that app.');
+                    const registration=await navigator.serviceWorker.register('./firebase-messaging-sw.js',{scope:'./'});
+                    await navigator.serviceWorker.ready;
+                    const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+                    if(permission!=='granted')throw Error('Permission was not granted. Use browser site settings to allow notifications.');
+                    const token=await getToken(getMessaging(app),{vapidKey:window.VDS_PUSH_VAPID_KEY,serviceWorkerRegistration:registration});
+                    if(!token)throw Error('Firebase did not return a push token. Check Cloud Messaging configuration.');
                     await setDoc(doc(db,'pushSubscriptions',user.uid,'devices',token.slice(0,32)),{
-                        token,uid:user.uid, email:user.email||'',updatedAt:serverTimestamp(),userAgent:navigator.userAgent
+                        token,uid:user.uid,email:user.email||'',updatedAt:serverTimestamp(),userAgent:navigator.userAgent
                     },{merge:true});
-                    setStatus('Push notifications enabled for this device.');
-                }catch(e){setStatus(e.message);}
+                    setStatus('Push enabled on this device. Test by sending a message from another account.');
+                    try{await registration.showNotification('VDS ERP notifications enabled',{body:'This device is ready to receive push alerts.',icon:LOGO_URL});}catch(e){console.warn(e);}
+                }catch(e){setStatus(e.message);}finally{setBusy(false);}
             };
             useEffect(()=>{
                 if(!user)return;
-                let cleanup=()=>{};
-                isSupported().then(supported=>{
-                    if(!supported)return;
-                    const unsubscribe=onMessage(getMessaging(app),payload=>{
+                let disposed=false,unsubscribe=()=>{};
+                isSupported().then(ok=>{
+                    if(!ok||disposed)return;
+                    unsubscribe=onMessage(getMessaging(app),payload=>{
                         const title=payload.notification?.title||payload.data?.title||'VDS ERP';
                         const body=payload.notification?.body||payload.data?.body||'New activity';
-                        if(Notification.permission==='granted')new Notification(title,{body,icon:LOGO_URL});
+                        setInApp({title,body,id:Date.now()});
+                        if(Notification.permission==='granted'&&document.visibilityState==='hidden'){
+                            navigator.serviceWorker.ready.then(reg=>reg.showNotification(title,{body,icon:LOGO_URL})).catch(console.warn);
+                        }
                     });
-                    cleanup=unsubscribe;
                 }).catch(console.warn);
-                return ()=>cleanup();
+                return()=>{disposed=true;unsubscribe();};
             },[user?.uid]);
-            return <div className="bg-white border rounded p-3 flex flex-wrap gap-3 items-center justify-between mb-3">
-                <div><p className="font-semibold text-sm">Mobile & desktop push alerts</p><p className="text-xs text-[#605e5c]">{status}</p></div>
-                <button className="bg-[#0078d4] text-white rounded px-3 py-2 text-sm" onClick={enable}>Enable on this device</button>
+            return <div className="bg-white border rounded p-3 mb-3 space-y-2">
+                <div className="flex flex-wrap gap-3 items-center justify-between">
+                    <div><p className="font-semibold text-sm">Mobile & desktop notifications</p><p className="text-xs text-[#605e5c] max-w-xl">{status}</p></div>
+                    <div className="flex gap-2"><button className="border rounded px-3 py-2 text-sm" onClick={check}>Check permission</button>
+                    <button disabled={busy} className="bg-[#0078d4] text-white rounded px-3 py-2 text-sm disabled:opacity-50" onClick={enable}>{busy?'Registering…':'Enable on this device'}</button></div>
+                </div>
+                {inApp&&<div role="alert" className="bg-[#eff6fc] border border-[#c7e0f4] p-3 rounded flex justify-between gap-3"><div><strong>{inApp.title}</strong><p className="text-sm">{inApp.body}</p></div><button aria-label="Dismiss notification" onClick={()=>setInApp(null)}>×</button></div>}
+                <p className="text-xs text-[#605e5c]">If blocked: Chrome/Edge → site settings → Notifications → Allow. iPhone: Safari → Share → Add to Home Screen, then open the installed app. Browser permission cannot be forced.</p>
             </div>;
         };
 
@@ -2041,6 +2060,7 @@
             const [allUsers, setAllUsers] = useState([]);
             const [messages, setMessages] = useState([]);
             const [chatError, setChatError] = useState("");
+            const [liveAlert,setLiveAlert] = useState(null);
             const [notificationSeen,setNotificationSeen] = useState({});
             const [notificationsOpen,setNotificationsOpen] = useState(false);
             useEffect(()=>{ if(!user?.uid)return; try{setNotificationSeen(JSON.parse(localStorage.getItem('vds_notice_seen_'+user.uid)||'{}'));}catch(e){setNotificationSeen({});} },[user?.uid]);
@@ -2108,7 +2128,7 @@
                         const now = new Date();
                         const msgTime = lastMsg.timestamp?.toDate ? lastMsg.timestamp.toDate() : new Date();
                         if (lastMsg.userId !== user.uid && (!lastMsg.recipientId || lastMsg.recipientId === user.uid || lastMsg.recipientId === profile.docId) && (now - msgTime) < 10000 && s.docChanges().some(c => c.type === 'added' && c.doc.id === lastMsg.id)) {
-                            sendNotification(`New Message from ${lastMsg.userName}`, lastMsg.type === 'pdf' ? 'Shared a PDF File' : lastMsg.text);
+                            setLiveAlert({title:`New message from ${lastMsg.userName}`,body:lastMsg.type==='pdf'?'Shared a PDF file':lastMsg.text,id:Date.now()});
                         }
                     }
                 }, err => { console.error("Chat subscription failed",err); setChatError("Cannot load messages: "+err.message); });
@@ -2161,6 +2181,12 @@
             const recentActivities=activityItems.slice(0,150);
             const unreadActivities=recentActivities.filter(x=>!notificationSeen[x.key]).length;
             const markAll=()=>setNotificationSeen(prev=>{const next={...prev};recentActivities.forEach(x=>next[x.key]=true);try{localStorage.setItem('vds_notice_seen_'+user.uid,JSON.stringify(next));}catch(e){}return next;});
+            const adminAction=async (kind,label,action)=>{
+                await action();
+                try{await addDoc(collection(db,'artifacts',APP_ID,'public','data','admin_events'),{
+                    kind,label,actorUid:user.uid,actorEmail:user.email,createdAt:serverTimestamp()
+                });}catch(e){console.warn('Admin event alert not recorded:',e);setLiveAlert({title:'Action completed',body:'Notification event could not be saved: '+e.message,id:Date.now()});}
+            };
             const handleLogout = async () => { await signOut(auth); setProfile(null); };
 
             if (loading) return <LoadingScreen />;
@@ -2243,14 +2269,15 @@
                         <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
                             <div className="max-w-6xl mx-auto h-full">
                                 <PushSetup user={user} profile={profile}/>
+                                {liveAlert&&<div role="alert" className="bg-[#eff6fc] border border-[#c7e0f4] p-3 rounded mb-3 flex justify-between gap-2"><div><strong>{liveAlert.title}</strong><p className="text-sm break-words">{liveAlert.body}</p></div><button aria-label="Dismiss alert" onClick={()=>setLiveAlert(null)}>×</button></div>}
                                 <div className="flex justify-end mb-3"><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
                                 {activeTab === 'notifications' && <ActivityCenter items={recentActivities} seen={notificationSeen} onRead={markNotification} onReadAll={markAll} onNavigate={setActiveTab}/>}
                                 {activeTab === 'it-admin' && profile.email === MASTER_ADMIN_EMAIL && <AdminITConsole tickets={tickets} tasks={tasks} notices={announcements}
-                                    onUpdateTicket={(id,d)=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id),d)}
-                                    onDeleteTicket={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id))}
-                                    onUpdateTask={(id,d)=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id),d)}
-                                    onDeleteTask={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id))}
-                                    onDeleteNotice={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','notices',id))}/>}
+                                    onUpdateTicket={(id,d)=>adminAction('ticket_update','IT ticket updated',()=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id),d))}
+                                    onDeleteTicket={id=>adminAction('ticket_delete','IT ticket deleted',()=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id)))}
+                                    onUpdateTask={(id,d)=>adminAction('task_update','Task updated by admin',()=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id),d))}
+                                    onDeleteTask={id=>adminAction('task_delete','Task deleted by admin',()=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id)))}
+                                    onDeleteNotice={id=>adminAction('notice_delete','Company notice removed',()=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','notices',id)))}/>}
                                 {activeTab === 'dashboard' && <Dashboard user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} tasks={tasks} leaves={leaves} reports={reports} announcements={announcements} setActiveTab={setActiveTab} onMarkAttendance={(type) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), { userId: user.uid, userName: profile.name, location: profile.location, type, timestamp: serverTimestamp() })} />}
                                 {activeTab === 'users' && profile.role === 'Admin' && <AdminUserManagement allUsers={allUsers} onAddUser={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), data)} onDeleteUser={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', id))} />}
                                 {activeTab === 'payroll-manager' && profile.role === 'Admin' && <AdminPayrollManager users={allUsers} onUpdateSalary={(uid, salaryConfig) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', uid), { salaryConfig })} />}
