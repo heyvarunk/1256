@@ -73,6 +73,9 @@
         
         body { -webkit-tap-highlight-color: transparent; }
     </style>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#0078d4">
+    <script>window.VDS_PUSH_VAPID_KEY="REPLACE_WITH_FIREBASE_WEB_PUSH_VAPID_KEY";</script>
 </head>
 <body class="bg-[#faf9f8] text-[#323130] font-sans selection:bg-[#c7e0f4]">
     <div id="root"></div>
@@ -84,6 +87,7 @@
         
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js';
+        import { getMessaging, getToken, onMessage, isSupported } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-messaging.js';
         import { getFirestore, collection, addDoc, setDoc, updateDoc, deleteDoc, doc, query, onSnapshot, serverTimestamp, orderBy, where, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js';
 
         // ------------------------------------------------------------------
@@ -1979,6 +1983,47 @@
             </div>;
         };
 
+
+        const PushSetup = ({ user, profile }) => {
+            const [status,setStatus]=useState('Not enabled on this device');
+            const enable=async()=>{
+                try {
+                    if(!window.isSecureContext)throw Error('HTTPS is required.');
+                    if(!('serviceWorker' in navigator))throw Error('Service workers are unavailable.');
+                    if(!await isSupported())throw Error('Firebase messaging is not supported on this browser.');
+                    if(!window.VDS_PUSH_VAPID_KEY || window.VDS_PUSH_VAPID_KEY==='REPLACE_WITH_FIREBASE_WEB_PUSH_VAPID_KEY')throw Error('Configure the Firebase Web Push VAPID key first.');
+                    const permission=await Notification.requestPermission();
+                    if(permission!=='granted')throw Error('Notifications were not allowed.');
+                    const registration=await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+                    const messaging=getMessaging(app);
+                    const token=await getToken(messaging,{vapidKey:window.VDS_PUSH_VAPID_KEY,serviceWorkerRegistration:registration});
+                    if(!token)throw Error('No push token was issued.');
+                    await setDoc(doc(db,'pushSubscriptions',user.uid,'devices',token.slice(0,32)),{
+                        token,uid:user.uid, email:user.email||'',updatedAt:serverTimestamp(),userAgent:navigator.userAgent
+                    },{merge:true});
+                    setStatus('Push notifications enabled for this device.');
+                }catch(e){setStatus(e.message);}
+            };
+            useEffect(()=>{
+                if(!user)return;
+                let cleanup=()=>{};
+                isSupported().then(supported=>{
+                    if(!supported)return;
+                    const unsubscribe=onMessage(getMessaging(app),payload=>{
+                        const title=payload.notification?.title||payload.data?.title||'VDS ERP';
+                        const body=payload.notification?.body||payload.data?.body||'New activity';
+                        if(Notification.permission==='granted')new Notification(title,{body,icon:LOGO_URL});
+                    });
+                    cleanup=unsubscribe;
+                }).catch(console.warn);
+                return ()=>cleanup();
+            },[user?.uid]);
+            return <div className="bg-white border rounded p-3 flex flex-wrap gap-3 items-center justify-between mb-3">
+                <div><p className="font-semibold text-sm">Mobile & desktop push alerts</p><p className="text-xs text-[#605e5c]">{status}</p></div>
+                <button className="bg-[#0078d4] text-white rounded px-3 py-2 text-sm" onClick={enable}>Enable on this device</button>
+            </div>;
+        };
+
         const App = () => {
             if (!isConfigured) return <ConfigErrorScreen />;
 
@@ -2197,6 +2242,7 @@
                         </header>
                         <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
                             <div className="max-w-6xl mx-auto h-full">
+                                <PushSetup user={user} profile={profile}/>
                                 <div className="flex justify-end mb-3"><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
                                 {activeTab === 'notifications' && <ActivityCenter items={recentActivities} seen={notificationSeen} onRead={markNotification} onReadAll={markAll} onNavigate={setActiveTab}/>}
                                 {activeTab === 'it-admin' && profile.email === MASTER_ADMIN_EMAIL && <AdminITConsole tickets={tickets} tasks={tasks} notices={announcements}
