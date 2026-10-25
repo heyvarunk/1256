@@ -3,143 +3,220 @@ name: Build Android WebView APK
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
-
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-
-    # Isolated Gradle runtime environment setup
     - name: Setup Gradle Runtime environment
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-version: 8.5
-
-    - name: Generate Clean Android Architecture Files
+        gradle-version: '8.5'
+    - name: Generate Android Files
       run: |
-        mkdir -p app/src/main/java/com/example/myapp
-        mkdir -p app/src/main/res/layout
-        
-        # 1. Create Manifest Permissions (Strict Android 14+ schema compliant syntax)
+        mkdir -p app/src/main/java/com/varundynamics/erp app/src/main/res/layout
         cat << 'EOF' > app/src/main/AndroidManifest.xml
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-            <application 
-                android:label="Varun ERP" 
-                android:hardwareAccelerated="true"
-                android:theme="@android:style/Theme.Material.Light.NoActionBar">
-                <activity android:name="com.example.myapp.MainActivity" android:exported="true" android:configChanges="orientation|screenSize">
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+            <application android:label="Varun ERP" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:usesCleartextTraffic="false">
+                <activity android:name="com.varundynamics.erp.MainActivity" android:exported="true">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
                     </intent-filter>
                 </activity>
+                <service android:name="com.varundynamics.erp.PushService" android:exported="false">
+                    <intent-filter>
+                        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                    </intent-filter>
+                </service>
             </application>
         </manifest>
         EOF
-
-        # 2. Create Layout View Structure with exact Android XML schema declaration
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
-        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
+        <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
             <WebView android:id="@+id/webview" android:layout_width="match_parent" android:layout_height="match_parent" />
-        </RelativeLayout>
+        </FrameLayout>
         EOF
-
-        # 3. Create Main Java Logic File pointing to your deployed site
-        cat << 'EOF' > app/src/main/java/com/example/myapp/MainActivity.java
-        package com.example.myapp;
+        cat << 'EOF' > app/src/main/java/com/varundynamics/erp/MainActivity.java
+        package com.varundynamics.erp;
+        import android.Manifest;
+        import android.app.Activity;
+        import android.app.NotificationChannel;
+        import android.app.NotificationManager;
+        import android.os.Build;
         import android.os.Bundle;
+        import android.content.pm.PackageManager;
+        import android.webkit.JavascriptInterface;
         import android.webkit.WebSettings;
         import android.webkit.WebView;
         import android.webkit.WebViewClient;
-        import android.webkit.WebChromeClient;
-        import android.app.Activity;
-
+        import android.webkit.WebResourceRequest;
+        import android.content.Intent;
+        import android.net.Uri;
+        import com.google.firebase.messaging.FirebaseMessaging;
+        import org.json.JSONObject;
         public class MainActivity extends Activity {
-            private WebView myWebView;
-            @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
+            private WebView web;
+            private static final String SITE="https://heyvarunk.github.io/1256/";
+            @Override public void onCreate(Bundle state) {
+                super.onCreate(state);
                 setContentView(R.layout.activity_main);
-                myWebView = (WebView) findViewById(R.id.webview);
-                
-                WebSettings settings = myWebView.getSettings();
-                settings.setJavaScriptEnabled(true);
-                settings.setDomStorageEnabled(true);
-                settings.setDatabaseEnabled(true);
-                settings.setAllowFileAccess(true);
-                settings.setLoadsImagesAutomatically(true);
-                settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-                
-                settings.setUseWideViewPort(true);
-                settings.setLoadWithOverviewMode(true);
-                
-                myWebView.setWebViewClient(new WebViewClient());
-                myWebView.setWebChromeClient(new WebChromeClient());
-                
-                // Mount Live Website URL
-                myWebView.loadUrl("https://heyvarunk.github.io/1256/");
+                if(Build.VERSION.SDK_INT>=26){
+                    NotificationChannel channel=new NotificationChannel("vds_messages","Varun ERP Notifications",NotificationManager.IMPORTANCE_HIGH);
+                    channel.enableVibration(true);
+                    getSystemService(NotificationManager.class).createNotificationChannel(channel);
+                }
+                if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},101);
+                }
+                web=findViewById(R.id.webview);
+                WebSettings s=web.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setAllowFileAccess(false);
+                s.setAllowContentAccess(false);
+                s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+                s.setUseWideViewPort(true);
+                s.setLoadWithOverviewMode(true);
+                web.addJavascriptInterface(new Object(){
+                    @JavascriptInterface public void requestToken(){
+                        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token->{
+                            runOnUiThread(()->{
+                                Uri current=Uri.parse(web.getUrl()==null?"":web.getUrl());
+                                if("https".equals(current.getScheme()) && "heyvarunk.github.io".equals(current.getHost()) && current.getPath()!=null && current.getPath().startsWith("/1256/")){
+                                    String script="window.VDSReceiveNativeToken && window.VDSReceiveNativeToken("+JSONObject.quote(token)+")";
+                                    web.evaluateJavascript(script,null);
+                                }
+                            });
+                        });
+                    }
+                },"VDSAndroidPush");
+                web.setWebViewClient(new WebViewClient(){
+                    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
+                        Uri uri=req.getUrl();
+                        if("https".equals(uri.getScheme()) && "heyvarunk.github.io".equals(uri.getHost()) && uri.getPath()!=null && uri.getPath().startsWith("/1256/"))return false;
+                        if(req.isForMainFrame()){
+                            try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(Exception ignored){}
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+                web.loadUrl(SITE);
             }
-            @Override
-            public void onBackPressed() {
-                if (myWebView.canGoBack()) { myWebView.goBack(); } else { super.onBackPressed(); }
-            }
+            @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
         }
         EOF
-
-        # 4. Create Standard Build Gradle Settings files
-        echo "include ':app'" > settings.gradle
-        
+        cat << 'EOF' > app/src/main/java/com/varundynamics/erp/PushService.java
+        package com.varundynamics.erp;
+        import android.Manifest;
+        import android.app.PendingIntent;
+        import android.content.Intent;
+        import android.content.pm.PackageManager;
+        import android.os.Build;
+        import androidx.core.app.NotificationCompat;
+        import androidx.core.app.NotificationManagerCompat;
+        import com.google.firebase.messaging.FirebaseMessagingService;
+        import com.google.firebase.messaging.RemoteMessage;
+        import java.util.Map;
+        public class PushService extends FirebaseMessagingService {
+            @Override public void onMessageReceived(RemoteMessage msg){
+                Map<String,String> data=msg.getData();
+                String title=data.get("title"),body=data.get("body");
+                if(msg.getNotification()!=null){
+                    if(title==null)title=msg.getNotification().getTitle();
+                    if(body==null)body=msg.getNotification().getBody();
+                }
+                if(title==null||title.isEmpty())title="Varun ERP";
+                if(body==null||body.isEmpty())body="New notification";
+                Intent intent=new Intent(this,MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                PendingIntent tap=PendingIntent.getActivity(this,0,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+                NotificationCompat.Builder note=new NotificationCompat.Builder(this,"vds_messages")
+                    .setSmallIcon(android.R.drawable.ic_dialog_email)
+                    .setContentTitle(title).setContentText(body)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).setContentIntent(tap);
+                if(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED){
+                    NotificationManagerCompat.from(this).notify((int)(System.currentTimeMillis()%Integer.MAX_VALUE),note.build());
+                }
+            }
+            @Override public void onNewToken(String token){super.onNewToken(token);}
+        }
+        EOF
+        cat << 'EOF' > settings.gradle
+        pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+        dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+        rootProject.name='VarunERP'
+        include ':app'
+        EOF
         cat << 'EOF' > build.gradle
-        buildscript {
-            repositories {
-                google()
-                mavenCentral()
-            }
-            dependencies {
-                classpath 'com.android.tools.build:gradle:8.2.2'
-            }
-        }
-        allprojects {
-            repositories {
-                google()
-                mavenCentral()
-            }
+        plugins {
+            id 'com.android.application' version '8.2.2' apply false
+            id 'com.google.gms.google-services' version '4.4.2' apply false
         }
         EOF
-        
         cat << 'EOF' > app/build.gradle
         plugins {
             id 'com.android.application'
+            id 'com.google.gms.google-services'
         }
         android {
-            namespace 'com.example.myapp'
+            namespace 'com.varundynamics.erp'
             compileSdk 34
             defaultConfig {
-                applicationId 'com.example.myapp'
+                applicationId 'com.varundynamics.erp'
                 minSdk 24
                 targetSdk 34
-                versionCode 1
-                versionName '1.0'
+                versionCode 3
+                versionName '3.0'
             }
+            compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+        }
+        dependencies {
+            implementation platform('com.google.firebase:firebase-bom:33.7.0')
+            implementation 'com.google.firebase:firebase-messaging'
+            implementation 'androidx.core:core:1.13.1'
         }
         EOF
-
+        if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+          printf "%s" "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > app/google-services.json
+        elif [ -f google-services.json ]; then
+          cp google-services.json app/google-services.json
+        else
+          echo 'Missing google-services.json or GOOGLE_SERVICES_JSON_BASE64 secret.' >&2
+          exit 1
+        fi
     - name: Build Android Debug APK
       run: gradle assembleDebug --stacktrace
-
     - name: Upload Downloadable APK File
       uses: actions/upload-artifact@v4
       with:
-        name: my-app-apk
+        name: Varun-ERP-Android-APK
         path: app/build/outputs/apk/debug/app-debug.apk
+    - name: Deploy Firebase Push Functions
+      env:
+        FIREBASE_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 }}
+      run: |
+        if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON_BASE64" ]; then
+          echo "Firebase deployment skipped: FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 not configured."
+          exit 0
+        fi
+        printf "%s" "$FIREBASE_SERVICE_ACCOUNT_JSON_BASE64" | base64 --decode > "$RUNNER_TEMP/firebase-service-account.json"
+        export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
+        npm install -g firebase-tools
+        cd functions
+        npm install --no-audit --no-fund
+        cd ..
+        firebase deploy --project varun-dynamics-app --only functions:messageCreated,functions:taskCreated,functions:taskUpdated,functions:ticketCreated,functions:ticketUpdated,functions:documentCreated,functions:noticeCreated,functions:adminEventCreated --non-interactive
