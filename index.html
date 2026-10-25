@@ -2030,52 +2030,124 @@
             const [messages, setMessages] = useState([]);
             const [chatError, setChatError] = useState("");
             const [liveAlert,setLiveAlert] = useState(null);
-            const initialMessagesLoaded = useRef(false);
+            const [alertHistory,setAlertHistory] = useState([]);
             const audioContextRef = useRef(null);
-            const soundReadyRef = useRef(false);
-            // Browser audio is unlocked by the first interaction; no permission popup is needed.
-            useEffect(() => {
-                const unlock = () => {
-                    try {
-                        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-                        audioContextRef.current.resume();
-                        soundReadyRef.current = true;
-                    } catch(e) { console.warn('Notification sound unavailable',e); }
-                };
-                window.addEventListener('pointerdown',unlock,{once:true});
-                window.addEventListener('keydown',unlock,{once:true});
-                return () => { window.removeEventListener('pointerdown',unlock); window.removeEventListener('keydown',unlock); };
-            },[]);
-            const playNotificationSound = () => {
+            const audioUnlockedRef = useRef(false);
+            const alertTimerRef = useRef(null);
+            const nativeNoticeCacheRef = useRef(new Map());
+            const showSystemNotice = async (title, body, key) => {
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                const dedupeKey = key || title + ':' + body;
+                const cache = nativeNoticeCacheRef.current;
+                const now = Date.now();
+                if (now - (cache.get(dedupeKey) || 0) < 12000) return;
+                cache.set(dedupeKey, now);
                 try {
-                    if (!soundReadyRef.current || !audioContextRef.current) return;
+                    const options = { body: String(body).slice(0,220), icon: LOGO_URL,
+                        badge: LOGO_URL, tag: String(dedupeKey), silent: false,
+                        data: { url: new URL('./index.html', location.href).href } };
+                    const registration = await navigator.serviceWorker?.getRegistration('./');
+                    if (registration?.showNotification) {
+                        await registration.showNotification(title, options);
+                    } else {
+                        const n = new Notification(title, options);
+                        n.onclick = () => { window.focus(); n.close(); };
+                    }
+                } catch (err) { console.warn('System notification failed:', err); }
+            };
+            const showIncomingAlert = (title,body) => {
+                const entry={title,body,id:Date.now()+Math.random()};
+                setLiveAlert(entry);
+                setAlertHistory(old=>[entry,...old].slice(0,40));
+                if(alertTimerRef.current)clearTimeout(alertTimerRef.current);
+                alertTimerRef.current=setTimeout(()=>setLiveAlert(null),9000);
+                try {
                     const ctx=audioContextRef.current;
-                    const oscillator=ctx.createOscillator(), gain=ctx.createGain();
-                    oscillator.type='sine'; oscillator.frequency.setValueAtTime(880,ctx.currentTime);
-                    gain.gain.setValueAtTime(0.08,ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.20);
-                    oscillator.connect(gain);gain.connect(ctx.destination);
-                    oscillator.start();oscillator.stop(ctx.currentTime+0.20);
-                } catch(e) { console.warn('Notification sound failed',e); }
+                    if(ctx && ctx.state==='running'){
+                        for(const [delay,freq] of [[0,880],[0.18,1100]]){
+                            const o=ctx.createOscillator(),g=ctx.createGain(),start=ctx.currentTime+delay;
+                            o.type='sine';o.frequency.value=freq;
+                            g.gain.setValueAtTime(0.0001,start);
+                            g.gain.exponentialRampToValueAtTime(0.17,start+0.02);
+                            g.gain.exponentialRampToValueAtTime(0.0001,start+0.17);
+                            o.connect(g);g.connect(ctx.destination);o.start(start);o.stop(start+0.18);
+                        }
+                    }
+                } catch(e){console.warn('Sound playback failed',e);}
             };
-            const showIncomingAlert=(title,body)=>{
-                setLiveAlert({title,body,id:Date.now()});
-                playNotificationSound();
-            };
-            // Foreground FCM notifications use the same banner/sound as live Firestore events.
+            // Browsers unlock audio only after user interaction. Repeatedly attempt
+            // on interaction rather than relying on a one-time event before login.
+            useEffect(()=>{
+                const unlock=()=>{
+                    try{
+                        if(!audioContextRef.current){
+                            const C=window.AudioContext||window.webkitAudioContext;
+                            if(!C)return;
+                            audioContextRef.current=new C();
+                        }
+                        audioContextRef.current.resume().then(()=>{audioUnlockedRef.current=true;}).catch(console.warn);
+                    }catch(e){console.warn('Audio unlock failed',e);}
+                };
+                document.addEventListener('pointerdown',unlock);
+                document.addEventListener('keydown',unlock);
+                return ()=>{document.removeEventListener('pointerdown',unlock);document.removeEventListener('keydown',unlock);};
+            },[]);
+            // Every incoming foreground FCM event gets the same toast and sound.
             useEffect(()=>{
                 if(!user?.uid)return;
-                let unsubscribe=()=>{},cancelled=false;
+                let stop=()=>{},cancelled=false;
                 isSupported().then(ok=>{
                     if(!ok||cancelled)return;
-                    unsubscribe=onMessage(getMessaging(app),payload=>{
+                    stop=onMessage(getMessaging(app),payload=>{
                         const title=payload.data?.title||payload.notification?.title||'New ERP activity';
                         const body=payload.data?.body||payload.notification?.body||'You have a new notification';
                         showIncomingAlert(title,body);
+                        showSystemNotice(title,body,payload.data?.eventKey||payload.messageId||title+body);
                     });
-                }).catch(e=>console.warn('Foreground push unavailable',e));
-                return ()=>{cancelled=true;unsubscribe();};
+                }).catch(e=>console.warn('Foreground FCM unavailable',e));
+                return ()=>{cancelled=true;stop();};
             },[user?.uid]);
+            // Incoming Firestore changes work without Cloud Functions or push permission.
+            // First snapshot is history and intentionally does not alert.
+            useEffect(()=>{
+                if(!user?.uid||!profile)return;
+                const myIds=[user.uid,profile.docId].filter(Boolean);
+                const names=[profile.name,profile.email,user.email,user.uid,profile.docId].filter(Boolean);
+                const base=['artifacts',APP_ID,'public','data'];
+                const subscriptions=[];
+                const watch=(collectionName,render,accept=()=>true)=>{
+                    let ready=false;
+                    const unsub=onSnapshot(collection(db,...base,collectionName),snap=>{
+                        if(!ready){ready=true;return;}
+                        for(const change of snap.docChanges()){
+                            if(change.type==='removed')continue;
+                            const value={id:change.doc.id,...change.doc.data()};
+                            if(accept(value,change.type)){
+                                const notice=render(value,change.type);
+                                if(notice){
+                                    showIncomingAlert(notice.title,notice.body);
+                                    showSystemNotice(notice.title,notice.body,collectionName+':'+value.id);
+                                }
+                            }
+                        }
+                    },err=>console.warn('Live alert listener '+collectionName,err));
+                    subscriptions.push(unsub);
+                };
+                watch('messages',m=>({title:m.recipientId&&m.recipientId!=='group'?'New private message':'New group message',
+                    body:(m.userName||'Colleague')+': '+(m.type==='pdf'?'Sent a PDF':(m.text||'New message').slice(0,160))}),
+                    (m,type)=>type==='added'&&!myIds.includes(m.userId)&&(!m.recipientId||m.recipientId==='group'||myIds.includes(m.recipientId)));
+                watch('tasks',t=>({title:'Task activity',body:(t.title||'Task')+' — '+(t.status||'Assigned')}),
+                    t=>names.includes(t.assignee)||names.includes(t.assignedTo)||names.includes(t.userId));
+                watch('tickets',t=>({title:'IT support activity',body:(t.subject||'IT request')+' — '+(t.status||'Open')}),
+                    t=>profile.role==='Admin'||myIds.includes(t.userId));
+                watch('documents',d=>({title:'Document uploaded',body:d.name||d.title||'New document'}),
+                    (d,type)=>type==='added'&&profile.role==='Admin'&&!myIds.includes(d.userId));
+                watch('notices',n=>({title:'Company notice',body:n.title||n.subject||'New announcement'}),
+                    (n,type)=>type==='added');
+                watch('admin_events',e=>({title:'Master Admin update',body:e.label||'ERP updated'}),
+                    (e,type)=>type==='added'&&!myIds.includes(e.actorUid));
+                return ()=>subscriptions.forEach(unsub=>unsub());
+            },[user?.uid,profile?.docId,profile?.role,profile?.name,profile?.email]);
             const [notificationSeen,setNotificationSeen] = useState({});
             const [notificationsOpen,setNotificationsOpen] = useState(false);
             useEffect(()=>{ if(!user?.uid)return; try{setNotificationSeen(JSON.parse(localStorage.getItem('vds_notice_seen_'+user.uid)||'{}'));}catch(e){setNotificationSeen({});} },[user?.uid]);
@@ -2138,18 +2210,6 @@
                     const newMessages = s.docs.map(d => ({id:d.id,...d.data()}));
                     setMessages(newMessages);
                     setChatError('');
-                    // Ignore initial history; alert for every newly added incoming message, not only the last one.
-                    if (initialMessagesLoaded.current) {
-                        const myIds = [user.uid,profile.docId].filter(Boolean);
-                        const incoming = s.docChanges().filter(c=>c.type==='added').map(c=>({id:c.doc.id,...c.doc.data()}))
-                            .filter(m=>!myIds.includes(m.userId) && (!m.recipientId || m.recipientId==='group' || myIds.includes(m.recipientId)));
-                        if(incoming.length) {
-                            const m=incoming[incoming.length-1];
-                            showIncomingAlert(m.recipientId && m.recipientId!=='group'?'New private message':'New team message',
-                                `${m.userName||'Colleague'}: ${m.type==='pdf'?'Shared a PDF file':m.text||'New message'}`);
-                        }
-                    }
-                    initialMessagesLoaded.current=true;
                 }, err=>{console.error('Chat subscription failed',err);setChatError('Cannot load messages: '+err.message);});
                 const unsub7 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), orderBy('timestamp', 'desc')), s => setIdeas(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub8 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), orderBy('timestamp', 'desc')), s => setAnnouncements(s.docs.map(d => ({id: d.id, ...d.data()}))));
@@ -2288,8 +2348,8 @@
                         <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
                             <div className="max-w-6xl mx-auto h-full">
                                 <PushSetup user={user} profile={profile}/>
-                                {liveAlert&&<div role="alert" className="bg-[#eff6fc] border border-[#c7e0f4] p-3 rounded mb-3 flex justify-between gap-2"><div><strong>{liveAlert.title}</strong><p className="text-sm break-words">{liveAlert.body}</p></div><button aria-label="Dismiss alert" onClick={()=>setLiveAlert(null)}>×</button></div>}
-                                <div className="flex justify-end mb-3"><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
+                                {liveAlert&&<div role="alert" aria-live="assertive" className="fixed top-4 right-4 left-4 md:left-auto md:w-[420px] z-[9999] bg-[#eaf4ff] border-2 border-[#0078d4] shadow-2xl p-4 rounded-xl flex justify-between gap-3"><div><strong className="block text-[#005a9e]">{liveAlert.title}</strong><p className="text-sm break-words mt-1">{liveAlert.body}</p></div><button aria-label="Dismiss alert" onClick={()=>setLiveAlert(null)} className="font-bold text-lg">×</button></div>}
+                                <div className="flex justify-end mb-3 gap-2"><button type="button" onClick={()=>showIncomingAlert('Notification test','If you see this banner, in-app alerts are working. Sound requires a browser interaction and device volume.')} className="bg-white border rounded px-3 py-2 text-sm">Test sound & banner</button><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
                                 {activeTab === 'notifications' && <ActivityCenter items={recentActivities} seen={notificationSeen} onRead={markNotification} onReadAll={markAll} onNavigate={setActiveTab}/>}
                                 {activeTab === 'it-admin' && profile.email === MASTER_ADMIN_EMAIL && <AdminITConsole tickets={tickets} tasks={tasks} notices={announcements}
                                     onUpdateTicket={(id,d)=>adminAction('ticket_update','IT ticket updated',()=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id),d))}
