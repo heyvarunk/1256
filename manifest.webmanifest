@@ -1,0 +1,9 @@
+{
+  "name": "Varun Dynamics ERP",
+  "short_name": "VDS ERP",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf9f8",
+  "theme_color": "#0078d4"
+}
