@@ -100,33 +100,17 @@ jobs:
                 web.addJavascriptInterface(new Object(){
                     @JavascriptInterface public void requestToken(){
                         // Never expose the token to a non-ERP page.
-                                                 FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task->{
-                             if(!task.isSuccessful()){
-                                 android.util.Log.e("VDS_FCM","Token generation failed",task.getException());
-                                 return;
-                             }
-                             String token=task.getResult();
-                             if(token==null || token.isEmpty()){
-                                 android.util.Log.e("VDS_FCM","Empty FCM token");
-                                 return;
-                             }
-                             android.util.Log.i("VDS_FCM","Android FCM token generated");
-                             runOnUiThread(()->{
-                                 Uri current=Uri.parse(web.getUrl()==null?"":web.getUrl());
-                                 if("https".equals(current.getScheme()) && "heyvarunk.github.io".equals(current.getHost()) && current.getPath()!=null && current.getPath().startsWith("/1256/")){
-                                     String script="window.VDSReceiveNativeToken ? (window.VDSReceiveNativeToken("+JSONObject.quote(token)+"),true) : false";
-                                     web.evaluateJavascript(script,result->android.util.Log.i("VDS_FCM","JS callback available: "+result));
-                                 }else android.util.Log.w("VDS_FCM","Blocked token bridge outside trusted ERP origin");
-                             });
-                         });
+                        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token->{
+                            runOnUiThread(()->{
+                                Uri current=Uri.parse(web.getUrl()==null?"":web.getUrl());
+                                if("https".equals(current.getScheme()) && "heyvarunk.github.io".equals(current.getHost()) && current.getPath()!=null && current.getPath().startsWith("/1256/")){
+                                    String script="window.VDSReceiveNativeToken && window.VDSReceiveNativeToken("+JSONObject.quote(token)+")";
+                                    web.evaluateJavascript(script,null);
+                                }
+                            });
+                        });
                     }
                 },"VDSAndroidPush");
-                web.setWebChromeClient(new android.webkit.WebChromeClient(){
-                    @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage msg){
-                        android.util.Log.i("VDS_WEB",""+msg.messageLevel()+": "+msg.message());
-                        return true;
-                    }
-                });
                 web.setWebViewClient(new WebViewClient(){
                     @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){
                         Uri uri=req.getUrl();
