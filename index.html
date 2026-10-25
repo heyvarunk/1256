@@ -2004,26 +2004,40 @@
                 },{merge:true});
                 setState('ready');setError('');
             };
-            // Android native APK: FirebaseMessaging token comes from Android, not Web Push.
+            // Native Android APK: retry the JS bridge until the signed-in user's token is stored.
             useEffect(()=>{
                 if(!user?.uid || !window.VDSAndroidPush)return;
-                let active=true;
+                let active=true, saved=false, busy=false, retryTimer;
                 const saveNativeToken=async token=>{
-                    if(!active || !token || typeof token!=='string')return;
+                    if(!active || saved || busy || typeof token!=='string' || !token)return;
+                    busy=true;
                     try{
                         await setDoc(doc(db,'pushSubscriptions',user.uid,'devices','android_'+token.slice(0,32)),{
                             token,uid:user.uid,email:user.email||'',platform:'android-native',
                             updatedAt:serverTimestamp(),userAgent:navigator.userAgent
                         },{merge:true});
-                        setState('ready');setError('');
-                    }catch(err){console.warn('Android push token registration failed',err);}
+                        saved=true;setState('ready');setError('');
+                        console.info('VDS_ANDROID_PUSH_REGISTERED');
+                    }catch(err){
+                        console.error('VDS_ANDROID_PUSH_SAVE_FAILED',err.code||'',err.message||err);
+                        setState('error');setError('Android registration failed: '+(err.message||err));
+                    }finally{busy=false;}
                 };
                 window.VDSReceiveNativeToken=saveNativeToken;
-                try{window.VDSAndroidPush.requestToken();}catch(err){console.warn('Android token request',err);}
-                return()=>{active=false;if(window.VDSReceiveNativeToken===saveNativeToken)delete window.VDSReceiveNativeToken;};
+                const ask=()=>{
+                    if(!active||saved)return;
+                    try{window.VDSAndroidPush.requestToken();}
+                    catch(err){console.error('VDS_ANDROID_PUSH_BRIDGE_FAILED',err);}
+                };
+                ask();
+                retryTimer=setInterval(ask,6000);
+                return()=>{
+                    active=false;clearInterval(retryTimer);
+                    if(window.VDSReceiveNativeToken===saveNativeToken)delete window.VDSReceiveNativeToken;
+                };
             },[user?.uid]);
             useEffect(()=>{
-                if(!user?.uid||permission!=='granted')return;
+                if(window.VDSAndroidPush || !user?.uid||permission!=='granted')return;
                 let cancelled=false;
                 register().catch(err=>{if(!cancelled){setState('error');setError(err.message);console.warn('Push registration',err);}});
                 return()=>{cancelled=true;};
