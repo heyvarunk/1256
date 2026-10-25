@@ -613,7 +613,11 @@
         };
 
         const AttendanceModule = ({ user, allUsers, attendanceLogs, onMarkAttendance }) => {
-            const todayStr = new Date().toDateString();
+            const [selectedDate,setSelectedDate] = useState(new Date().toISOString().slice(0,10));
+            const [now,setNow] = useState(Date.now());
+            useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),30000);return ()=>clearInterval(t)},[]);
+            const todayStr = new Date(selectedDate+'T12:00:00').toDateString();
+            const exportCSV=()=>{const rows=[['Employee','Date','Punch In','Punch Out','Hours','Status']];allUsers.forEach(u=>{const ls=attendanceLogs.filter(l=>l.userId===u.id&&l.timestamp?.toDate&&l.timestamp.toDate().toDateString()===todayStr).sort((a,b)=>a.timestamp.toMillis()-b.timestamp.toMillis());const i=ls.find(l=>l.type==='IN');const o=ls.find(l=>l.type==='OUT');const a=i?.timestamp?.toDate();const b=o?.timestamp?.toDate();rows.push([u.name,selectedDate,a?a.toLocaleTimeString():'',b?b.toLocaleTimeString():'',a&&b?((b-a)/3600000).toFixed(2):'',a?(b?'Completed':'Working'):'Absent'])});const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='VDS_Attendance_'+selectedDate+'.csv';link.click();URL.revokeObjectURL(url)};
             
             // Logic shared across views
             const REQUIRED_MS = 9 * 3600000; // 9 Hours Fixed
@@ -632,7 +636,7 @@
                 if (hasPunchedIn && hasPunchedOut) {
                     workedMs = punchOutTime - punchInTime;
                 } else if (hasPunchedIn) {
-                    workedMs = Date.now() - punchInTime;
+                    workedMs = now - punchInTime;
                 }
 
                 const workedH = Math.floor(workedMs / 3600000);
@@ -676,7 +680,7 @@
                     <div className="space-y-6 animate-fade-in pb-20">
                         <header>
                             <h2 className="text-2xl font-semibold text-[#323130]">Daily Attendance</h2>
-                            <p className="text-sm text-[#605e5c] mt-1">Record and track your 9-hour daily work requirement. Strictly ONE punch-in and punch-out allowed per day.</p>
+                            <p className="text-sm text-[#605e5c] mt-1">Record your daily punch-in and punch-out against the 9-hour shift requirement.</p>
                         </header>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -704,7 +708,7 @@
 
                                 <div className="flex flex-col items-center justify-center gap-4 text-center">
                                     <button 
-                                        onClick={() => !stats.hasPunchedOut && onMarkAttendance('OUT')} 
+                                        onClick={() => stats.hasPunchedIn && !stats.hasPunchedOut && onMarkAttendance('OUT')} 
                                         disabled={!stats.hasPunchedIn || stats.hasPunchedOut}
                                         className={`w-36 h-36 rounded-full flex flex-col items-center justify-center gap-2 transition-all transform active:scale-95 shadow-md border-4 ${(!stats.hasPunchedIn || stats.hasPunchedOut) ? 'bg-[#f3f2f1] text-[#a19f9d] border-[#edebe9] cursor-not-allowed opacity-70' : 'bg-white text-[#a4262c] border-[#fde7e9] hover:bg-[#fff4f5]'}`}
                                     >
@@ -754,7 +758,7 @@
             // Admin View
             return (
                 <div className="space-y-6 animate-fade-in pb-20">
-                    <header><h2 className="text-2xl font-semibold text-[#323130]">Team Attendance Overview</h2></header>
+                    <header className="flex flex-wrap justify-between gap-3"><div><h2 className="text-2xl font-semibold text-[#323130]">Team Attendance Overview</h2><p className="text-sm text-[#605e5c]">Historical daily punch records, working hours and CSV export.</p></div><div className="flex gap-2"><input type="date" className="border rounded p-2" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/><button onClick={exportCSV} className="bg-[#0078d4] text-white rounded px-3">Export CSV</button></div></header>
                     <div className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left whitespace-nowrap">
@@ -1064,163 +1068,90 @@
             );
         };
 
-        const ChatModule = ({ user, allUsers, messages, onSendMessage }) => {
+        // Chat uses the EXISTING Firestore messages collection. No client or attendance records are changed.
+        const ChatModule = ({ user, allUsers, messages, onSendMessage, chatError }) => {
             const [text, setText] = useState('');
-            const [isUploading, setIsUploading] = useState(false);
-            const [activeChat, setActiveChat] = useState('group'); // 'group' | userId
+            const [activeChat, setActiveChat] = useState('group');
             const [sidebarOpen, setSidebarOpen] = useState(true);
-            
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            const [search, setSearch] = useState('');
+            const [unreadSeen, setUnreadSeen] = useState({});
             const fileInputRef = useRef(null);
             const bottomRef = useRef(null);
-            
-            // Auto-scroll when active chat messages change
-            useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "auto" }); }, [messages, activeChat]);
-
-            const handleSend = (e) => {
+            const myIds = [user.uid, user.docId].filter(Boolean);
+            const identity = u => u.uid || (u.id === 'admin_master' ? u.uid : u.id);
+            const others = allUsers.filter(u => u.email !== user.email && !myIds.includes(identity(u)))
+                .filter(u => (u.name || u.email || '').toLowerCase().includes(search.toLowerCase()));
+            const recipient = allUsers.find(u => identity(u) === activeChat || u.id === activeChat);
+            const recipientIds = recipient ? [recipient.uid, recipient.id].filter(Boolean) : [activeChat];
+            const belongs = m => {
+                if (activeChat === 'group') return !m.recipientId || m.recipientId === 'group';
+                return (myIds.includes(m.userId) && recipientIds.includes(m.recipientId)) ||
+                       (recipientIds.includes(m.userId) && myIds.includes(m.recipientId));
+            };
+            const activeMessages = messages.filter(belongs);
+            const messageTime = m => m.timestamp?.toMillis ? m.timestamp.toMillis() : 0;
+            const switchChat = id => { setActiveChat(id); setSidebarOpen(false); setError(''); setUnreadSeen(v => ({...v,[id]:Date.now()})); };
+            useEffect(() => { bottomRef.current?.scrollIntoView({behavior:'auto'}); }, [messages.length,activeChat]);
+            const handleSend = async e => {
                 e.preventDefault();
-                if(!text.trim()) return;
-                onSendMessage({ 
-                    text, 
-                    type: 'text', 
-                    userId: user.uid, 
-                    userName: user.name, 
-                    userPhoto: user.photoURL || '', 
-                    recipientId: activeChat === 'group' ? null : activeChat,
-                    timestamp: serverTimestamp() 
-                });
-                setText('');
+                if (!text.trim() || busy) return;
+                setBusy(true); setError('');
+                try {
+                    await onSendMessage({text:text.trim(),type:'text',userId:user.uid,userName:user.name,userPhoto:user.photoURL||'',
+                        recipientId:activeChat==='group'?null:activeChat,timestamp:serverTimestamp()});
+                    setText('');
+                } catch(err) {setError('Message not sent: '+err.message);} finally {setBusy(false);}
             };
-
-            const handleFileSelect = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                if (file.type !== 'application/pdf') { alert('Only PDF files are allowed.'); return; }
-                if (file.size > 500 * 1024) { alert('File too large! Please upload PDFs smaller than 500KB.'); return; }
-                setIsUploading(true);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    onSendMessage({ 
-                        text: 'Shared a PDF file', 
-                        type: 'pdf', 
-                        fileName: file.name, 
-                        fileData: reader.result, 
-                        userId: user.uid, 
-                        userName: user.name, 
-                        userPhoto: user.photoURL || '',
-                        recipientId: activeChat === 'group' ? null : activeChat,
-                        timestamp: serverTimestamp() 
-                    });
-                    setIsUploading(false); e.target.value = null;
-                };
-                reader.readAsDataURL(file);
+            const handleFileSelect = async e => {
+                const file=e.target.files?.[0]; if(!file)return;
+                if(file.type!=='application/pdf'||file.size>500*1024){setError('PDF only, maximum 500 KB.');e.target.value='';return;}
+                setBusy(true);setError('');
+                try {
+                    const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file);});
+                    await onSendMessage({text:'Shared a PDF file',type:'pdf',fileName:file.name,fileData:data,userId:user.uid,userName:user.name,
+                        userPhoto:user.photoURL||'',recipientId:activeChat==='group'?null:activeChat,timestamp:serverTimestamp()});
+                } catch(err){setError('File not sent: '+err.message);}finally{setBusy(false);e.target.value='';}
             };
-
-            const switchChat = (id) => {
-                setActiveChat(id);
-                setSidebarOpen(false); // Auto close sidebar on mobile
-            };
-
-            // Filter messages securely for current chat context
-            const activeMessages = messages.filter(m => {
-                if (activeChat === 'group') return !m.recipientId;
-                return (m.userId === user.uid && m.recipientId === activeChat) || (m.userId === activeChat && m.recipientId === user.uid);
-            });
-
-            // Get target user details if in private chat
-            const activeUser = activeChat !== 'group' ? allUsers.find(u => u.id === activeChat) : null;
-            const otherUsers = allUsers.filter(u => u.id !== user.uid);
-
-            return (
-                <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden animate-fade-in relative">
-                    
-                    {/* Chat Sidebar (Groups & DMs) */}
-                    <div className={`w-full md:w-72 flex-shrink-0 border-r border-[#edebe9] bg-[#faf9f8] flex flex-col transition-transform ${sidebarOpen ? 'absolute md:static z-20 h-full transform-none' : 'hidden md:flex'}`}>
-                        <div className="p-4 border-b border-[#edebe9] bg-white">
-                            <h3 className="font-semibold text-[#323130] flex items-center gap-2"><Lucide.MessageSquare size={18}/> Messages</h3>
-                        </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            <div className="p-3">
-                                <p className="text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 px-2">Channels</p>
-                                <button 
-                                    onClick={() => switchChat('group')} 
-                                    className={`w-full flex items-center gap-3 p-2 rounded transition-colors ${activeChat === 'group' ? 'bg-[#eff6fc] text-[#0078d4] font-semibold' : 'text-[#323130] hover:bg-[#edebe9]'}`}
-                                >
-                                    <div className="w-8 h-8 rounded bg-[#0078d4] text-white flex items-center justify-center flex-shrink-0"><Lucide.Users size={16}/></div>
-                                    <span>Team Group Chat</span>
-                                </button>
-                            </div>
-                            
-                            <div className="p-3 pt-0">
-                                <p className="text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 px-2 mt-4">Direct Messages</p>
-                                {otherUsers.map(u => (
-                                    <button 
-                                        key={u.id}
-                                        onClick={() => switchChat(u.id)}
-                                        className={`w-full flex items-center gap-3 p-2 rounded transition-colors ${activeChat === u.id ? 'bg-[#eff6fc] text-[#0078d4] font-semibold' : 'text-[#323130] hover:bg-[#edebe9]'}`}
-                                    >
-                                        <div className="w-8 h-8 rounded-full bg-[#e1dfdd] text-[#323130] flex items-center justify-center flex-shrink-0 overflow-hidden text-xs font-bold border border-[#c8c6c4]">
-                                            {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover"/> : u.name.charAt(0)}
-                                        </div>
-                                        <span className="truncate flex-1 text-left">{u.name}</span>
-                                    </button>
-                                ))}
-                                {otherUsers.length === 0 && <p className="text-xs text-[#605e5c] px-2">No other users found.</p>}
-                            </div>
-                        </div>
+            return <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex bg-white rounded shadow-sm border overflow-hidden relative">
+                <aside className={`${sidebarOpen?'absolute md:static z-20 h-full':'hidden md:flex'} w-full md:w-72 shrink-0 border-r bg-[#faf9f8] flex flex-col`}>
+                    <div className="p-4 border-b bg-white font-semibold flex items-center gap-2"><Lucide.MessageSquare size={18}/> Messages</div>
+                    <div className="p-3"><input className="border rounded p-2 w-full text-sm" placeholder="Find a colleague" value={search} onChange={e=>setSearch(e.target.value)}/></div>
+                    <div className="flex-1 overflow-auto p-3 space-y-1">
+                        <button onClick={()=>switchChat('group')} className={`w-full text-left rounded p-3 flex gap-2 items-center ${activeChat==='group'?'bg-[#eff6fc] text-[#0078d4]':'hover:bg-[#edebe9]'}`}><Lucide.Users size={18}/> Team Group Chat</button>
+                        <p className="text-xs font-bold text-[#605e5c] uppercase pt-4 pb-2">Direct messages</p>
+                        {others.map(u=>{const id=identity(u);const unseen=messages.filter(m=>m.userId===id&&myIds.includes(m.recipientId)&&messageTime(m)>(unreadSeen[id]||0)).length;
+                            return <button key={u.id} onClick={()=>switchChat(id)} className={`w-full text-left rounded p-3 flex items-center justify-between gap-2 ${activeChat===id?'bg-[#eff6fc] text-[#0078d4]':'hover:bg-[#edebe9]'}`}>
+                                <span className="truncate">{u.name||u.email}</span>{unseen>0&&<span className="text-xs bg-[#0078d4] text-white rounded-full px-2">{unseen}</span>}
+                            </button>;})}
+                        {!others.length&&<p className="text-sm text-[#605e5c]">No colleagues found.</p>}
                     </div>
-
-                    {/* Chat Area */}
-                    <div className="flex-1 flex flex-col min-w-0 bg-white z-10 w-full">
-                        {/* Header */}
-                        <div className="p-4 bg-white border-b border-[#edebe9] font-semibold text-[#323130] flex items-center gap-3 shadow-sm z-10">
-                            <button onClick={() => setSidebarOpen(true)} className="md:hidden text-[#605e5c] hover:bg-[#f3f2f1] p-1 rounded"><Lucide.ArrowLeft size={20}/></button>
-                            {activeChat === 'group' ? (
-                                <><Lucide.Users size={20} className="text-[#0078d4]"/> Team Group Chat</>
-                            ) : (
-                                activeUser && <><div className="w-8 h-8 rounded-full bg-[#f3f2f1] flex items-center justify-center text-[#605e5c] border border-[#edebe9] text-xs">{activeUser.name.charAt(0)}</div> {activeUser.name}</>
-                            )}
-                        </div>
-                        
-                        {/* Messages Container */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f8] custom-scrollbar">
-                            {activeMessages.map(m => (
-                                <div key={m.id} className={`flex gap-2 ${m.userId === user.uid ? 'flex-row-reverse' : 'flex-row'}`}>
-                                    <div className="w-8 h-8 rounded-full bg-white border border-[#edebe9] flex-shrink-0 overflow-hidden shadow-sm">
-                                         {m.userPhoto ? <img src={m.userPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-[#605e5c]">{m.userName.charAt(0)}</div>}
-                                    </div>
-                                    <div className={`max-w-[75%] p-3 rounded text-sm shadow-sm ${m.userId === user.uid ? 'bg-[#0078d4] text-white rounded-tr-none' : 'bg-white border border-[#edebe9] text-[#323130] rounded-tl-none'}`}>
-                                        <div className="flex justify-between items-baseline gap-4 mb-1">
-                                            <p className="font-semibold text-xs opacity-90">{m.userName}</p>
-                                            <span className="text-[10px] opacity-70">{m.timestamp?.toDate ? m.timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
-                                        </div>
-                                        {m.type === 'pdf' ? (
-                                            <div className="flex items-center gap-2 bg-black/10 p-2 rounded mt-1">
-                                                <Lucide.FileText size={24} className="flex-shrink-0" />
-                                                <div className="overflow-hidden">
-                                                    <p className="truncate font-semibold">{m.fileName}</p>
-                                                    <a href={m.fileData} download={m.fileName} className="text-xs underline hover:no-underline font-semibold mt-1 inline-block">Download PDF</a>
-                                                </div>
-                                            </div>
-                                        ) : (<p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>)}
-                                    </div>
-                                </div>
-                            ))}
-                            {activeMessages.length === 0 && <div className="text-center py-10 text-[#a19f9d] text-sm">No messages yet. Start the conversation!</div>}
-                            <div ref={bottomRef} className="h-1" />
-                        </div>
-                        
-                        {/* Input Form */}
-                        <form onSubmit={handleSend} className="p-3 md:p-4 border-t border-[#edebe9] bg-white flex gap-2 items-center">
-                            <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
-                            <button type="button" onClick={() => fileInputRef.current.click()} className="text-[#605e5c] hover:text-[#0078d4] p-2 rounded transition-colors bg-[#f3f2f1]" disabled={isUploading}>
-                                {isUploading ? <Lucide.Loader2 size={20} className="animate-spin"/> : <Lucide.Paperclip size={20}/>}
-                            </button>
-                            <input type="text" className="flex-1 bg-white border border-[#8a8886] rounded px-4 py-2 text-base md:text-sm focus:ring-2 focus:ring-[#0078d4] outline-none" placeholder={activeChat === 'group' ? "Message team..." : "Type a private message..."} value={text} onChange={e => setText(e.target.value)} />
-                            <button className="bg-[#0078d4] text-white p-2 rounded hover:bg-[#106ebe] flex-shrink-0 shadow-sm"><Lucide.Send size={18}/></button>
-                        </form>
+                </aside>
+                <section className="flex-1 min-w-0 flex flex-col">
+                    <header className="p-4 border-b font-semibold flex items-center gap-3">
+                        <button type="button" onClick={()=>setSidebarOpen(true)} className="md:hidden"><Lucide.Menu size={20}/></button>
+                        {activeChat==='group'?<><Lucide.Users size={19}/> Team Group Chat</>:(recipient?.name||recipient?.email||'Direct Message')}
+                    </header>
+                    {(error||chatError)&&<div role="alert" className="bg-[#fde7e9] text-[#a4262c] p-3 text-sm">{error||chatError}</div>}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9f8]">
+                        {activeMessages.map(m=><div key={m.id} className={`flex ${myIds.includes(m.userId)?'justify-end':'justify-start'}`}>
+                            <div className={`max-w-[85%] md:max-w-[70%] rounded p-3 shadow-sm text-sm ${myIds.includes(m.userId)?'bg-[#0078d4] text-white':'bg-white border'}`}>
+                                <div className="text-xs font-semibold mb-1">{m.userName||'Employee'} <span className="font-normal opacity-70">{m.timestamp?.toDate?m.timestamp.toDate().toLocaleString():''}</span></div>
+                                {m.type==='pdf'&&m.fileData?<a className="underline" href={m.fileData} download={m.fileName||'attachment.pdf'}>Download {m.fileName||'PDF'}</a>:<p className="whitespace-pre-wrap break-words">{m.text}</p>}
+                            </div>
+                        </div>)}
+                        {!activeMessages.length&&<p className="text-center text-[#605e5c] p-8">No messages yet. Start a conversation.</p>}
+                        <div ref={bottomRef}/>
                     </div>
-                </div>
-            );
+                    <form onSubmit={handleSend} className="p-3 border-t flex items-center gap-2">
+                        <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect}/>
+                        <button type="button" disabled={busy} onClick={()=>fileInputRef.current?.click()} className="p-2 bg-[#f3f2f1] rounded" title="Attach PDF"><Lucide.Paperclip size={20}/></button>
+                        <input value={text} onChange={e=>setText(e.target.value)} placeholder={activeChat==='group'?'Message the team':'Private message'} className="min-w-0 flex-1 border rounded p-2 text-base" />
+                        <button type="submit" disabled={busy||!text.trim()} className="bg-[#0078d4] disabled:opacity-50 text-white rounded p-2"><Lucide.Send size={20}/></button>
+                    </form>
+                </section>
+            </div>;
         };
 
         const ProgressModule = ({ user, tasks, attendanceLogs, reports }) => {
@@ -1790,103 +1721,35 @@
         };
 
         const CRMModule = ({ user, clients, onAddClient, onUpdateClient, onDeleteClient }) => {
-            const [name, setName] = useState('');
-            const [company, setCompany] = useState('');
-            const [phone, setPhone] = useState('');
-            const [email, setEmail] = useState('');
-            const [status, setStatus] = useState('Lead');
-            const [selectedClient, setSelectedClient] = useState(null);
-            const [note, setNote] = useState('');
-
-            const handleAdd = (e) => {
-                e.preventDefault();
-                if(!name || !phone) return;
-                onAddClient({ name, company, phone, email, status, addedBy: user.name, logs: [], timestamp: serverTimestamp() });
-                setName(''); setCompany(''); setPhone(''); setEmail('');
-            };
-
-            const handleAddNote = (e, clientId, logs) => {
-                e.preventDefault();
-                if(!note) return;
-                const updatedLogs = [...(logs || []), { text: note, date: new Date().toLocaleString(), by: user.name }];
-                onUpdateClient(clientId, { logs: updatedLogs });
-                setNote('');
-            };
-
-            return (
-                <div className="space-y-6 pb-20 animate-fade-in">
-                    <header>
-                        <h2 className="text-2xl font-semibold text-[#323130]">Client Relationship Management (CRM)</h2>
-                        <p className="text-[#605e5c] text-sm">Manage client details, leads, and call logs securely.</p>
-                    </header>
-
-                    <div className="bg-white p-6 rounded shadow-sm border border-[#edebe9]">
-                        <h3 className="font-semibold text-[#323130] mb-4">Add New Client/Lead</h3>
-                        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                            <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Client Name" value={name} onChange={e=>setName(e.target.value)} required />
-                            <input type="text" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Company Name" value={company} onChange={e=>setCompany(e.target.value)} />
-                            <input type="tel" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Phone Number" value={phone} onChange={e=>setPhone(e.target.value)} required />
-                            <input type="email" className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4]" placeholder="Email Address" value={email} onChange={e=>setEmail(e.target.value)} />
-                            <select className="border border-[#8a8886] p-2 rounded focus:ring-2 focus:ring-[#0078d4] bg-white" value={status} onChange={e=>setStatus(e.target.value)}>
-                                <option>Lead</option><option>Active Client</option><option>Inactive</option>
-                            </select>
-                            <div className="md:col-span-5"><button className="bg-[#0078d4] text-white px-6 py-2 rounded font-semibold hover:bg-[#106ebe] shadow-sm">Save Client</button></div>
-                        </form>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                        {clients.map(client => (
-                            <div key={client.id} className="bg-white rounded shadow-sm border border-[#edebe9] overflow-hidden">
-                                <div className="p-4 flex flex-col md:flex-row justify-between md:items-center gap-4 hover:bg-[#faf9f8] cursor-pointer" onClick={() => setSelectedClient(selectedClient === client.id ? null : client.id)}>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-[#eff6fc] text-[#0078d4] flex items-center justify-center font-bold flex-shrink-0">{client.name.charAt(0)}</div>
-                                        <div>
-                                            <h4 className="font-semibold text-[#323130] text-lg">{client.name} {client.company && <span className="text-sm font-normal text-[#605e5c]">({client.company})</span>}</h4>
-                                            <div className="flex flex-wrap gap-3 text-xs text-[#605e5c] mt-1">
-                                                <span className="flex items-center gap-1"><Lucide.Phone size={12}/> {client.phone}</span>
-                                                {client.email && <span className="flex items-center gap-1"><Lucide.Mail size={12}/> {client.email}</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <select 
-                                            className={`text-xs font-semibold px-2 py-1 rounded border outline-none ${client.status === 'Active Client' ? 'bg-[#dff6dd] text-[#107c10] border-[#c3f1c0]' : client.status === 'Lead' ? 'bg-[#fff4ce] text-[#795c00] border-[#ffe78c]' : 'bg-[#f3f2f1] text-[#605e5c] border-[#edebe9]'}`}
-                                            value={client.status}
-                                            onChange={(e) => { e.stopPropagation(); onUpdateClient(client.id, {status: e.target.value}); }}
-                                        >
-                                            <option value="Lead">Lead</option><option value="Active Client">Active Client</option><option value="Inactive">Inactive</option>
-                                        </select>
-                                        {(user.role === 'Admin' || user.email === CRM_EMAIL) && (
-                                            <button onClick={(e)=>{ e.stopPropagation(); if(confirm('Delete client?')) onDeleteClient(client.id); }} className="text-[#a19f9d] hover:text-[#a4262c]"><Lucide.Trash2 size={16}/></button>
-                                        )}
-                                        <Lucide.ChevronDown size={20} className={`text-[#605e5c] transition-transform ${selectedClient === client.id ? 'rotate-180' : ''}`} />
-                                    </div>
-                                </div>
-                                
-                                {selectedClient === client.id && (
-                                    <div className="p-4 border-t border-[#edebe9] bg-[#faf9f8] animate-fade-in">
-                                        <h5 className="text-sm font-semibold text-[#323130] mb-3 flex items-center gap-2"><Lucide.History size={16}/> Call Logs & Notes</h5>
-                                        <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto custom-scrollbar">
-                                            {(client.logs || []).map((log, i) => (
-                                                <div key={i} className="bg-white p-3 rounded border border-[#edebe9] text-sm">
-                                                    <p className="text-[#323130]">{log.text}</p>
-                                                    <p className="text-xs text-[#605e5c] mt-1">{log.date} by {log.by}</p>
-                                                </div>
-                                            ))}
-                                            {(!client.logs || client.logs.length === 0) && <p className="text-xs text-[#605e5c]">No communication logs added yet.</p>}
-                                        </div>
-                                        <form onSubmit={(e) => handleAddNote(e, client.id, client.logs)} className="flex gap-2">
-                                            <input type="text" className="flex-1 border border-[#8a8886] p-2 rounded text-sm focus:ring-2 focus:ring-[#0078d4]" placeholder="Type a note or call summary..." value={note} onChange={e=>setNote(e.target.value)} />
-                                            <button className="bg-[#107c10] text-white px-4 py-2 rounded text-sm font-semibold hover:bg-[#0b5a0b] flex items-center gap-2"><Lucide.Plus size={16}/> Add Note</button>
-                                        </form>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                        {clients.length === 0 && <div className="text-center py-10 text-[#605e5c] bg-white rounded shadow-sm border border-[#edebe9]">No clients in the CRM. Add one above.</div>}
-                    </div>
-                </div>
-            );
+            const [form, setForm] = useState({name:'',company:'',phone:'',email:'',status:'Lead',requirement:'',value:'',priority:'Medium',source:''});
+            const [search,setSearch] = useState('');
+            const [filter,setFilter] = useState('All');
+            const [expanded,setExpanded] = useState(null);
+            const [note,setNote] = useState('');
+            const [reminder,setReminder] = useState({at:'',message:'',assignee:''});
+            const [busy,setBusy] = useState(false);
+            const [clock,setClock] = useState(Date.now());
+            useEffect(()=>{const t=setInterval(()=>setClock(Date.now()),30000);return ()=>clearInterval(t)},[]);
+            const save = async(e)=>{e.preventDefault();if(!form.name.trim()||!form.phone.trim())return;setBusy(true);try{await onAddClient({...form,value:Number(form.value)||0,addedBy:user.name,logs:[],reminders:[],timestamp:serverTimestamp()});setForm({name:'',company:'',phone:'',email:'',status:'Lead',requirement:'',value:'',priority:'Medium',source:''})}catch(err){alert(err.message)}finally{setBusy(false)}};
+            const update = async(id,patch)=>{try{await onUpdateClient(id,patch)}catch(err){alert(err.message)}};
+            const addNote=async(e,c)=>{e.preventDefault();if(!note.trim())return;await update(c.id,{logs:[...(c.logs||[]),{text:note.trim(),date:new Date().toLocaleString(),by:user.name}]});setNote('')};
+            const addReminder=async(e,c)=>{e.preventDefault();if(!reminder.at)return;const r={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),at:new Date(reminder.at).toISOString(),message:reminder.message||'Call client',assignee:reminder.assignee.trim().toLowerCase(),done:false,createdBy:user.email||user.name};await update(c.id,{reminders:[...(c.reminders||[]),r]});setReminder({at:'',message:'',assignee:''})};
+            const setReminderDone=(c,r)=>update(c.id,{reminders:(c.reminders||[]).map(x=>x.id===r.id?{...x,done:true,doneAt:new Date().toISOString()}:x)});
+            const matches=clients.filter(c=>(filter==='All'||c.status===filter)&&[c.name,c.company,c.phone,c.email,c.requirement].some(v=>String(v||'').toLowerCase().includes(search.toLowerCase())));
+            const upcoming=clients.flatMap(c=>(c.reminders||[]).filter(r=>!r.done).map(r=>({...r,client:c}))).sort((a,b)=>new Date(a.at)-new Date(b.at));
+            const myEmail=(user.email||'').toLowerCase();
+            const myReminders=upcoming.filter(r=>!r.assignee||r.assignee===myEmail);
+            useEffect(()=>{if(!('Notification' in window)||Notification.permission!=='granted')return;myReminders.forEach(r=>{const when=new Date(r.at).getTime();const key='vds-crm-alert-'+r.id;if(when<=clock&&clock-when<86400000&&!sessionStorage.getItem(key)){new Notification('CRM Follow-up: '+r.client.name,{body:r.message,icon:LOGO_URL});sessionStorage.setItem(key,'1')}})},[clock,clients,user.email]);
+            const field=(key,placeholder,type='text')=><input type={type} className="border border-[#8a8886] p-2 rounded w-full" placeholder={placeholder} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/>;
+            const fmt=(d)=>{const t=new Date(d);return Number.isNaN(t.getTime())?'—':t.toLocaleString()};
+            return <div className="space-y-6 pb-20 animate-fade-in">
+                <header className="flex flex-wrap justify-between gap-3"><div><h2 className="text-2xl font-semibold">Client Relationship Management</h2><p className="text-sm text-[#605e5c]">Sales pipeline, contacts, call history and assigned follow-ups. Existing records remain in Firestore.</p></div><button className="border rounded px-3 py-2 bg-white" onClick={()=>('Notification' in window)?Notification.requestPermission():alert('Notifications not supported')}>Enable reminders</button></header>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Total Clients',clients.length],['Active Clients',clients.filter(c=>c.status==='Active Client').length],['Open Leads',clients.filter(c=>c.status==='Lead').length],['Due Reminders',myReminders.filter(r=>new Date(r.at).getTime()<=clock).length]].map(([label,value])=><div key={label} className="bg-white p-4 rounded border"><p className="text-xs text-[#605e5c]">{label}</p><p className="text-2xl font-semibold">{value}</p></div>)}</div>
+                <section className="bg-white p-5 rounded border"><h3 className="font-semibold mb-3">Add New Client / Lead</h3><form onSubmit={save} className="grid grid-cols-1 md:grid-cols-3 gap-3">{field('name','Contact name *')}{field('company','Company')}{field('phone','Phone *','tel')}{field('email','Email','email')}{field('requirement','Client requirement')}{field('value','Estimated quotation ₹','number')}{field('source','Lead source')}<select className="border p-2 rounded" value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option>Lead</option><option>Active Client</option><option>Inactive</option></select><select className="border p-2 rounded" value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select><button disabled={busy} className="bg-[#0078d4] text-white px-5 py-2 rounded font-semibold md:col-span-3">{busy?'Saving...':'Save Client'}</button></form></section>
+                <section className="bg-white border rounded p-4"><h3 className="font-semibold mb-2">Follow-up Reminder Center</h3><p className="text-xs text-[#605e5c] mb-3">In-app and browser alerts work while this page is open. Closed-app mobile push requires a separate server and Firebase Messaging setup.</p>{myReminders.length===0?<p className="text-sm text-[#605e5c]">No pending reminders assigned to you.</p>:<div className="space-y-2 max-h-52 overflow-auto">{myReminders.slice(0,30).map(r=><div key={r.id} className="border rounded p-3 flex flex-wrap justify-between gap-2"><div><b>{r.client.name}</b> — {r.message}<div className={'text-xs '+(new Date(r.at).getTime()<=clock?'text-red-700':'text-[#605e5c]')}>{fmt(r.at)} {new Date(r.at).getTime()<=clock?'• Due':''}</div></div><button onClick={()=>setReminderDone(r.client,r)} className="text-[#0078d4] text-sm">Mark done</button></div>)}</div>}</section>
+                <div className="flex flex-wrap gap-3"><input className="flex-1 min-w-[180px] border rounded p-2" placeholder="Search clients, companies, phone, requirement" value={search} onChange={e=>setSearch(e.target.value)}/><select className="border rounded p-2" value={filter} onChange={e=>setFilter(e.target.value)}>{['All','Lead','Active Client','Inactive'].map(s=><option key={s}>{s}</option>)}</select></div>
+                <div className="space-y-3">{matches.map(c=><div key={c.id} className="bg-white border rounded overflow-hidden"><div className="p-4 flex flex-wrap justify-between gap-3"><button className="text-left flex-1" onClick={()=>{setExpanded(expanded===c.id?null:c.id);setNote('');setReminder({at:'',message:'',assignee:''})}}><b>{c.name||'Unnamed'}</b> <span className="text-sm text-[#605e5c]">{c.company||''}</span><p className="text-xs text-[#605e5c] mt-1">{c.phone} · {c.email||'No email'} · {c.requirement||''}</p></button><div className="flex items-center gap-2"><select className="border rounded p-1 text-sm" value={c.status||'Lead'} onChange={e=>update(c.id,{status:e.target.value})}>{['Lead','Active Client','Inactive'].map(s=><option key={s}>{s}</option>)}</select>{(user.role==='Admin'||user.email===CRM_EMAIL)&&<button className="text-red-700 text-xs" onClick={()=>{if(confirm('Permanently delete this client?'))onDeleteClient(c.id)}}>Delete</button>}</div></div>{expanded===c.id&&<div className="border-t bg-[#faf9f8] p-4 space-y-4"><div className="flex flex-wrap gap-4 text-sm"><span>Value: ₹{Number(c.value||0).toLocaleString('en-IN')}</span><span>Priority: {c.priority||'—'}</span><span>Source: {c.source||'—'}</span>{c.phone&&<a className="text-[#0078d4]" href={'tel:'+c.phone}>Call</a>}{c.phone&&<a className="text-[#0078d4]" target="_blank" rel="noreferrer" href={'https://wa.me/'+String(c.phone).replace(/\D/g,'')}>WhatsApp</a>}</div><h4 className="font-semibold text-sm">Call Logs & Notes</h4>{(c.logs||[]).map((l,i)=><div key={i} className="bg-white border p-2 text-sm">{l.text}<p className="text-xs text-[#605e5c]">{l.date} · {l.by}</p></div>)}<form onSubmit={e=>addNote(e,c)} className="flex gap-2"><input className="border p-2 rounded flex-1 min-w-0" value={note} onChange={e=>setNote(e.target.value)} placeholder="Call outcome / client note"/><button className="bg-[#107c10] text-white px-3 rounded">Add Note</button></form><h4 className="font-semibold text-sm">Schedule Follow-up</h4><form onSubmit={e=>addReminder(e,c)} className="grid grid-cols-1 md:grid-cols-4 gap-2"><input type="datetime-local" required className="border rounded p-2" value={reminder.at} onChange={e=>setReminder({...reminder,at:e.target.value})}/><input className="border rounded p-2" placeholder="Reminder message" value={reminder.message} onChange={e=>setReminder({...reminder,message:e.target.value})}/><input className="border rounded p-2" placeholder="Assigned employee email (blank = all)" value={reminder.assignee} onChange={e=>setReminder({...reminder,assignee:e.target.value})}/><button className="bg-[#0078d4] text-white rounded p-2">Set Reminder</button></form>{(c.reminders||[]).map(r=><div key={r.id} className="flex justify-between gap-2 text-xs border-b py-2"><span>{fmt(r.at)} · {r.message} · {r.assignee||'All'} · {r.done?'Completed':'Pending'}</span>{!r.done&&<button className="text-[#0078d4]" onClick={()=>setReminderDone(c,r)}>Done</button>}</div>)}</div>}</div>)}{matches.length===0&&<p className="text-center p-8 text-[#605e5c]">No matching clients.</p>}</div>
+            </div>;
         };
 
         const AdminUserManagement = ({ allUsers, onAddUser, onDeleteUser }) => {
@@ -2055,6 +1918,67 @@
             );
         };
 
+
+        // Non-destructive activity inbox: derives notifications from existing Firestore records.
+        const ActivityCenter = ({ items, seen, onRead, onReadAll, onNavigate }) => (
+            <div className="bg-white border rounded shadow-sm p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-semibold text-xl flex gap-2 items-center"><Lucide.Bell size={20}/> Notifications</h2>
+                    <button className="text-sm text-[#0078d4]" onClick={onReadAll}>Mark all read</button>
+                </div>
+                <p className="text-xs text-[#605e5c]">Live while the app is open. Mobile background push requires Firebase Cloud Messaging and a server scheduler.</p>
+                <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+                    {!items.length && <p className="text-sm text-[#605e5c]">No notifications yet.</p>}
+                    {items.map(item=><button key={item.key} onClick={()=>{onRead(item.key);onNavigate(item.tab);}}
+                        className={`w-full text-left p-3 rounded border ${seen[item.key]?'bg-white':'bg-[#eff6fc] border-[#c7e0f4]'}`}>
+                        <div className="flex justify-between gap-2"><span className="font-semibold text-sm">{item.title}</span>{!seen[item.key]&&<span className="text-[#0078d4] text-xs">New</span>}</div>
+                        <p className="text-sm text-[#605e5c] break-words">{item.body}</p>
+                        <p className="text-xs text-[#605e5c] mt-1">{item.when?new Date(item.when).toLocaleString():''}</p>
+                    </button>)}
+                </div>
+            </div>
+        );
+
+        // Master Admin IT operations. Only selected existing collections can be edited.
+        const AdminITConsole = ({ tickets, tasks, notices, onUpdateTicket, onDeleteTicket, onUpdateTask, onDeleteTask, onDeleteNotice }) => {
+            const [error,setError]=useState('');
+            const [busy,setBusy]=useState('');
+            const run=async (key,fn,destructive=false)=>{
+                if(destructive&&!window.confirm('Delete this record permanently?'))return;
+                setBusy(key);setError('');
+                try{await fn();}catch(e){setError(e.message);}finally{setBusy('');}
+            };
+            return <div className="space-y-6 pb-16">
+                <h2 className="text-2xl font-semibold">Master Admin — IT & Operations</h2>
+                <p className="text-sm text-[#605e5c]">Manage help-desk requests, task records and notices. Existing clients, attendance and unrelated data are not modified.</p>
+                {error&&<p role="alert" className="p-3 bg-[#fde7e9] text-[#a4262c]">{error}</p>}
+                <div className="bg-white border rounded p-4 space-y-3"><h3 className="font-semibold">IT & Help Desk Tickets ({tickets.length})</h3>
+                    {tickets.map(t=><div key={t.id} className="border-t pt-3 flex flex-wrap items-center gap-3">
+                        <div className="flex-1 min-w-[180px]"><p className="font-semibold">{t.subject}</p><p className="text-xs text-[#605e5c]">{t.userName} · {t.category}</p></div>
+                        <select aria-label={`Status for ${t.subject}`} value={t.status||'Open'} className="border rounded p-2 text-sm" onChange={e=>run(t.id,()=>onUpdateTicket(t.id,{status:e.target.value,updatedAt:serverTimestamp()}))}>
+                            {['Open','In Progress','Pending','Resolved','Closed'].map(v=><option key={v}>{v}</option>)}
+                        </select>
+                        <button disabled={!!busy} onClick={()=>run(t.id,()=>onDeleteTicket(t.id),true)} className="text-[#a4262c] text-sm border rounded p-2">Delete</button>
+                    </div>)}
+                </div>
+                <div className="bg-white border rounded p-4 space-y-3"><h3 className="font-semibold">Tasks ({tasks.length})</h3>
+                    {tasks.map(t=><div key={t.id} className="border-t pt-3 flex flex-wrap items-center gap-3">
+                        <span className="flex-1 min-w-[180px] text-sm">{t.title}</span>
+                        <select aria-label={`Task status for ${t.title}`} value={t.status||'todo'} className="border rounded p-2 text-sm" onChange={e=>run(t.id,()=>onUpdateTask(t.id,{status:e.target.value}))}>
+                            <option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="done">Completed</option>
+                        </select>
+                        <button disabled={!!busy} onClick={()=>run(t.id,()=>onDeleteTask(t.id),true)} className="text-[#a4262c] text-sm border rounded p-2">Delete</button>
+                    </div>)}
+                </div>
+                <div className="bg-white border rounded p-4 space-y-3"><h3 className="font-semibold">Notices ({notices.length})</h3>
+                    {notices.map(n=><div key={n.id} className="border-t pt-3 flex items-center gap-3">
+                        <span className="flex-1 text-sm">{n.title||n.subject||n.text||'Notice'}</span>
+                        <button disabled={!!busy} onClick={()=>run(n.id,()=>onDeleteNotice(n.id),true)} className="text-[#a4262c] text-sm border rounded p-2">Delete</button>
+                    </div>)}
+                </div>
+            </div>;
+        };
+
         const App = () => {
             if (!isConfigured) return <ConfigErrorScreen />;
 
@@ -2071,6 +1995,12 @@
             const [reports, setReports] = useState([]);
             const [allUsers, setAllUsers] = useState([]);
             const [messages, setMessages] = useState([]);
+            const [chatError, setChatError] = useState("");
+            const [notificationSeen,setNotificationSeen] = useState({});
+            const [notificationsOpen,setNotificationsOpen] = useState(false);
+            useEffect(()=>{ if(!user?.uid)return; try{setNotificationSeen(JSON.parse(localStorage.getItem('vds_notice_seen_'+user.uid)||'{}'));}catch(e){setNotificationSeen({});} },[user?.uid]);
+            const markNotification = key => setNotificationSeen(prev=>{const next={...prev,[key]:true};try{localStorage.setItem('vds_notice_seen_'+user.uid,JSON.stringify(next));}catch(e){}return next;});
+
             const [ideas, setIdeas] = useState([]);
             const [announcements, setAnnouncements] = useState([]);
             const [tickets, setTickets] = useState([]);
@@ -2116,7 +2046,7 @@
                         taskList.forEach(task => {
                             if (task.status === 'done' && task.completedAt) {
                                 const completedTime = task.completedAt.toDate ? task.completedAt.toDate().getTime() : Date.now();
-                                if (now - completedTime > 24 * 60 * 60 * 1000) { deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', task.id)); }
+                                // Keep completed tasks for audit; do not auto-delete existing records.
                             }
                         });
                     }
@@ -2127,15 +2057,16 @@
                 const unsub5 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), orderBy('timestamp', 'asc')), s => {
                     const newMessages = s.docs.map(d => ({id: d.id, ...d.data()}));
                     setMessages(newMessages);
+                    setChatError("");
                     if (!s.empty) {
                         const lastMsg = newMessages[newMessages.length - 1];
                         const now = new Date();
                         const msgTime = lastMsg.timestamp?.toDate ? lastMsg.timestamp.toDate() : new Date();
-                        if (lastMsg.userId !== user.uid && (now - msgTime) < 10000 && s.docChanges().some(c => c.type === 'added' && c.doc.id === lastMsg.id)) {
+                        if (lastMsg.userId !== user.uid && (!lastMsg.recipientId || lastMsg.recipientId === user.uid || lastMsg.recipientId === profile.docId) && (now - msgTime) < 10000 && s.docChanges().some(c => c.type === 'added' && c.doc.id === lastMsg.id)) {
                             sendNotification(`New Message from ${lastMsg.userName}`, lastMsg.type === 'pdf' ? 'Shared a PDF File' : lastMsg.text);
                         }
                     }
-                });
+                }, err => { console.error("Chat subscription failed",err); setChatError("Cannot load messages: "+err.message); });
                 const unsub7 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), orderBy('timestamp', 'desc')), s => setIdeas(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub8 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'notices'), orderBy('timestamp', 'desc')), s => setAnnouncements(s.docs.map(d => ({id: d.id, ...d.data()}))));
                 const unsub9 = onSnapshot(query(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tickets'), orderBy('timestamp', 'desc')), s => setTickets(s.docs.map(d => ({id: d.id, ...d.data()}))));
@@ -2155,6 +2086,36 @@
                 return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10(); unsub11(); unsub12(); unsub13(); unsub14(); unsub15(); unsub16(); };
             }, [user, profile]);
 
+
+            // Existing collections are read only to build this feed; no migration.
+            const activityItems = [];
+            const asMillis = v => v?.toMillis?v.toMillis():v?.seconds?v.seconds*1000:0;
+            const addActivity=(type,record,title,body,tab)=>{
+                const when=asMillis(record.timestamp||record.createdAt||record.addedAt);
+                if(!when)return;
+                activityItems.push({key:type+':'+record.id,title,body,tab,when});
+            };
+            messages.forEach(m=>{
+                if(m.userId!==user?.uid && (!m.recipientId||m.recipientId==='group'||m.recipientId===user?.uid||m.recipientId===profile?.docId))
+                    addActivity('message',m,m.recipientId?'Direct message':'Group message',(m.userName||'Colleague')+': '+(m.type==='pdf'?'Shared a PDF':(m.text||'').slice(0,110)),'chat');
+            });
+            tickets.forEach(t=>{
+                if(profile?.role==='Admin' || t.userId===user?.uid)
+                    addActivity('ticket',t,'IT / Help Desk request',`${t.userName||'Employee'}: ${t.subject||'Request'} (${t.status||'Open'})`,'helpdesk');
+            });
+            documents.forEach(d=>{
+                if(profile?.role==='Admin'||d.userId===user?.uid)
+                    addActivity('document',d,'Document uploaded',d.name||d.title||'New document','vault');
+            });
+            tasks.forEach(t=>{
+                if(t.assignee===profile?.name || (profile?.role==='Admin'&&t.createdBy!==profile?.name))
+                    addActivity('task',t,'Task activity',t.title||'Task updated','tasks');
+            });
+            announcements.forEach(n=>addActivity('notice',n,'Company notice',n.title||n.subject||'New notice','notices'));
+            activityItems.sort((a,b)=>b.when-a.when);
+            const recentActivities=activityItems.slice(0,150);
+            const unreadActivities=recentActivities.filter(x=>!notificationSeen[x.key]).length;
+            const markAll=()=>setNotificationSeen(prev=>{const next={...prev};recentActivities.forEach(x=>next[x.key]=true);try{localStorage.setItem('vds_notice_seen_'+user.uid,JSON.stringify(next));}catch(e){}return next;});
             const handleLogout = async () => { await signOut(auth); setProfile(null); };
 
             if (loading) return <LoadingScreen />;
@@ -2185,6 +2146,7 @@
                         <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar pb-6">
                             <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-2">Workspace</p>
                             <NavItem id="dashboard" icon={Lucide.LayoutDashboard} label="Dashboard" />
+                            <NavItem id="notifications" icon={Lucide.Bell} label={`Notifications (${unreadActivities})`} />
                             <NavItem id="meetings" icon={Lucide.CalendarClock} label="Meetings" />
                             <NavItem id="notices" icon={Lucide.Megaphone} label="Notice Board" />
                             <NavItem id="vault" icon={Lucide.FolderLock} label="Document Vault" />
@@ -2197,7 +2159,7 @@
                             <NavItem id="leaves" icon={Lucide.CalendarDays} label="Leaves" />
                             
                             <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Collaboration</p>
-                            <NavItem id="chat" icon={Lucide.MessageSquare} label="Group Chat" />
+                            <NavItem id="chat" icon={Lucide.MessageSquare} label="Team & Direct Chat" />
                             <NavItem id="ideas" icon={Lucide.Lightbulb} label="Idea Hub" />
                             <NavItem id="training" icon={Lucide.GraduationCap} label="Learning Hub" />
                             <NavItem id="progress" icon={Lucide.BarChart2} label="My Progress" />
@@ -2220,6 +2182,7 @@
                                     <p className="px-4 text-xs font-semibold text-[#605e5c] uppercase tracking-wider mb-2 mt-6">Admin Panel</p>
                                     <NavItem id="users" icon={Lucide.Users} label="User Management" />
                                     <NavItem id="payroll-manager" icon={Lucide.DollarSign} label="Payroll Manager" />
+                                    {profile.email === MASTER_ADMIN_EMAIL && <NavItem id="it-admin" icon={Lucide.Settings} label="IT Admin Console" />}
                                 </>
                             )}
                         </nav>
@@ -2234,6 +2197,14 @@
                         </header>
                         <div className="flex-1 overflow-auto p-4 lg:p-8 relative">
                             <div className="max-w-6xl mx-auto h-full">
+                                <div className="flex justify-end mb-3"><button onClick={()=>setActiveTab('notifications')} className="bg-white border rounded px-3 py-2 flex items-center gap-2 text-sm" aria-label={`Notifications, ${unreadActivities} unread`}><Lucide.Bell size={17}/> Notifications {unreadActivities>0&&<span className="bg-[#0078d4] text-white rounded-full px-2">{unreadActivities}</span>}</button></div>
+                                {activeTab === 'notifications' && <ActivityCenter items={recentActivities} seen={notificationSeen} onRead={markNotification} onReadAll={markAll} onNavigate={setActiveTab}/>}
+                                {activeTab === 'it-admin' && profile.email === MASTER_ADMIN_EMAIL && <AdminITConsole tickets={tickets} tasks={tasks} notices={announcements}
+                                    onUpdateTicket={(id,d)=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id),d)}
+                                    onDeleteTicket={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tickets',id))}
+                                    onUpdateTask={(id,d)=>updateDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id),d)}
+                                    onDeleteTask={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','tasks',id))}
+                                    onDeleteNotice={id=>deleteDoc(doc(db,'artifacts',APP_ID,'public','data','notices',id))}/>}
                                 {activeTab === 'dashboard' && <Dashboard user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} tasks={tasks} leaves={leaves} reports={reports} announcements={announcements} setActiveTab={setActiveTab} onMarkAttendance={(type) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'attendance'), { userId: user.uid, userName: profile.name, location: profile.location, type, timestamp: serverTimestamp() })} />}
                                 {activeTab === 'users' && profile.role === 'Admin' && <AdminUserManagement allUsers={allUsers} onAddUser={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'), data)} onDeleteUser={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', id))} />}
                                 {activeTab === 'payroll-manager' && profile.role === 'Admin' && <AdminPayrollManager users={allUsers} onUpdateSalary={(uid, salaryConfig) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', uid), { salaryConfig })} />}
@@ -2241,7 +2212,7 @@
                                 {activeTab === 'tasks' && <TaskBoard user={{...profile, uid: user.uid}} tasks={tasks} onAddTask={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'tasks'), data)} onUpdateTaskStatus={(id, status) => updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id), status)} onDeleteTask={(id) => deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'tasks', id))} />}
                                 {activeTab === 'leaves' && <AvailabilityModule user={{...profile, uid: user.uid}} leaves={leaves} onAddLeave={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'leaves'), data)} />}
                                 {activeTab === 'eod' && <EODModule user={{...profile, uid: user.uid}} reports={reports} onSubmitReport={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'daily_reports'), data)} />}
-                                {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} allUsers={allUsers} messages={messages} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
+                                {activeTab === 'chat' && <ChatModule user={{...profile, uid: user.uid}} allUsers={allUsers} messages={messages} chatError={chatError} onSendMessage={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'messages'), data)} />}
                                 {activeTab === 'progress' && <ProgressModule user={{...profile, uid: user.uid}} tasks={tasks} attendanceLogs={attendanceLogs} reports={reports} />}
                                 {activeTab === 'ideas' && <IdeaHubModule user={{...profile, uid: user.uid}} ideas={ideas} onSubmitIdea={(data) => addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'ideas'), data)} />}
                                 {activeTab === 'payroll' && <PayrollModule user={{...profile, uid: user.uid}} attendanceLogs={attendanceLogs} leaves={leaves} />}
